@@ -170,3 +170,25 @@ test('automatic cleanup', () => {
   source.set(3);
   console.log('After effect stop, memoComputeCount should not increase. count:', memoComputeCount);
 });
+
+test('diamond dependency (glitch)', () => {
+  const s = signal(1);
+  const m1 = memo(() => {
+    console.log('  [Compute M1]');
+    return s() + 1;
+  });
+  const m2 = memo(() => {
+    console.log('  [Compute M2]');
+    return s() + 2;
+  });
+
+  let effectRunCount = 0;
+  effect(() => {
+    effectRunCount++;
+    console.log('  [Effect Run] sum:', m1() + m2());
+  });
+
+  console.log('--- updating s.set(10) ---');
+  s.set(10);
+  console.log('Final effectRunCount:', effectRunCount);
+});

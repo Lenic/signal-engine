@@ -1,5 +1,5 @@
 import { DependencyList, Subscriber } from './types';
-import { activeSubscriber, runWithSubscriber, scheduleUpdate } from './runtime';
+import { activeSubscriber, runWithSubscriber, scheduleUpdate, batch } from './runtime';
 import {
   appendToDependencyList,
   createDependencyNode,
@@ -37,6 +37,7 @@ export function effect(fn: () => void): () => void {
     children: [],
     active: true,
     trackingIndex: 0,
+    rank: 0,
   };
 
   if (activeSubscriber) {
@@ -82,6 +83,12 @@ export function track(list: DependencyList) {
   const subscriber = activeSubscriber;
   const index = subscriber.trackingIndex++;
 
+  // 🚀 RANK PROPAGATION:
+  // Ensure the subscriber's rank is always greater than its dependency's rank.
+  if (subscriber.rank <= list.rank) {
+    subscriber.rank = list.rank + 1;
+  }
+
   // 🚀 REUSE OPTIMIZATION:
   // If the dependency at this index is the same, reuse it and avoid object creation.
   if (subscriber.subscriptions[index]?.dependencyList === list) {
@@ -105,14 +112,11 @@ export function track(list: DependencyList) {
  * Triggers updates for all subscribers in a dependency list.
  */
 export function trigger(list: DependencyList) {
-  const subscribersToRun: Subscriber[] = [];
-  forEachSubscriber(list, (node) => {
-    if (node.subscriber) {
-      subscribersToRun.push(node.subscriber);
-    }
+  batch(() => {
+    forEachSubscriber(list, (node) => {
+      if (node.subscriber) {
+        scheduleUpdate(node.subscriber);
+      }
+    });
   });
-
-  for (const subscriber of subscribersToRun) {
-    scheduleUpdate(subscriber);
-  }
 }

@@ -6,7 +6,7 @@ import { track, trigger } from './effect';
  */
 export function signal<T>(initialValue: T): Signal<T> {
   let value = initialValue;
-  const dependencyList: DependencyList = { head: null, tail: null };
+  const dependencyList: DependencyList = { head: null, tail: null, rank: 0 };
 
   const getter = (() => {
     track(dependencyList);

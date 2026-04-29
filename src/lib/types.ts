@@ -33,6 +33,11 @@ export interface DependencyList {
    * The last node in the list.
    */
   tail: DependencyNode | null;
+  /**
+   * The topological rank of this data source.
+   * Signals have a rank of 0, while Memos have a rank higher than their dependencies.
+   */
+  rank: number;
 }
 
 /**
@@ -64,6 +69,11 @@ export interface Subscriber {
    * Used to optimize memory by reusing existing dependency nodes.
    */
   trackingIndex: number;
+  /**
+   * The topological rank of this subscriber.
+   * Used to ensure glitch-free execution order.
+   */
+  rank: number;
 }
 
 /**

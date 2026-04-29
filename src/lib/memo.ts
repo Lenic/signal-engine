@@ -9,7 +9,7 @@ import { removeFromDependencyList } from './linked-list';
 export function memo<T>(fn: () => T): Memo<T> {
   let cachedValue: T;
   let isDirty = true;
-  const dependencyList: DependencyList = { head: null, tail: null };
+  const dependencyList: DependencyList = { head: null, tail: null, rank: 0 };
 
   const subscriber: Subscriber = {
     run() {
@@ -22,6 +22,7 @@ export function memo<T>(fn: () => T): Memo<T> {
     children: [],
     active: true,
     trackingIndex: 0,
+    rank: 0,
   };
 
   // Automatically track as a child if created inside an effect
@@ -37,6 +38,9 @@ export function memo<T>(fn: () => T): Memo<T> {
       runWithSubscriber(subscriber, () => {
         cachedValue = fn();
       });
+
+      // Sync dependency list rank with subscriber rank
+      dependencyList.rank = subscriber.rank;
 
       // Cleanup unused subscriptions after computation
       if (subscriber.trackingIndex < subscriber.subscriptions.length) {
