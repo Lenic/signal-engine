@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "incremental": false,
+    "target": "ES2019",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "composite": true
+  }
+}
