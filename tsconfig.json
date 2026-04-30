@@ -1,14 +1,23 @@
 {
   "compilerOptions": {
-    "incremental": false,
-    "target": "ES2019",
+    "target": "ES2022",
     "module": "ESNext",
-    "moduleResolution": "node",
-    "declaration": true,
+    "moduleResolution": "bundler",
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "dist",
     "rootDir": "src",
-    "composite": true
-  }
+    "composite": true,
+    "declaration": true,
+    "noImplicitAny": false,
+    "esModuleInterop": true,
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "tsdown.config.ts"
+  ]
 }

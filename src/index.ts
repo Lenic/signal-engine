@@ -1,1 +1,1 @@
-import './lib/test';
+export * from './lib';

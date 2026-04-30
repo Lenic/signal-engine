@@ -35,9 +35,7 @@ export function memo<T>(fn: () => T): Memo<T> {
 
     if (isDirty) {
       subscriber.trackingIndex = 0;
-      runWithSubscriber(subscriber, () => {
-        cachedValue = fn();
-      });
+      runWithSubscriber(subscriber, () => void (cachedValue = fn()));
 
       // Sync dependency list rank with subscriber rank
       dependencyList.rank = subscriber.rank;
