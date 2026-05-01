@@ -29,8 +29,9 @@ export class Observable implements IObservable {
 
     // 🚀 RANK PROPAGATION:
     // Ensure the subscriber's rank is strictly greater than its dependency's rank.
+    // Use updateRank to propagate changes through the topological graph.
     if (subscriber.rank <= this.rank) {
-      subscriber.rank = this.rank + 1;
+      subscriber.updateRank(this.rank + 1);
     }
 
     // 🚀 REUSE OPTIMIZATION:
@@ -60,11 +61,14 @@ export class Observable implements IObservable {
    */
   public trigger(): void {
     Scheduler.batch(() => {
-      this.forEach((node) => {
-        if (node.subscriber) {
-          Scheduler.scheduleUpdate(node.subscriber);
+      let current = this.head;
+      while (current) {
+        const next = current.next;
+        if (current.subscriber) {
+          Scheduler.scheduleUpdate(current.subscriber);
         }
-      });
+        current = next;
+      }
     });
   }
 
@@ -109,19 +113,5 @@ export class Observable implements IObservable {
     node.next = null;
     node.list = null;
     node.subscriber = null;
-  }
-
-  /**
-   * Iterates through all nodes in the linked list and applies the callback.
-   *
-   * @param callback - The function to execute for each node.
-   */
-  private forEach(callback: (node: IDependencyNode) => void): void {
-    let current = this.head;
-    while (current) {
-      const next = current.next; // Store next in case current is removed during callback
-      callback(current);
-      current = next;
-    }
   }
 }

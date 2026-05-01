@@ -15,10 +15,17 @@ export interface ISubscriber {
   /** The parent subscriber, if this subscriber was created within another context. */
   parent: ISubscriber | null;
 
+  /** Indicates whether this subscriber is currently in the execution queue. */
+  isQueued: boolean;
+  /** Pointer to the next subscriber in the scheduler's queue (Intrusive Linked List). */
+  nextScheduled: ISubscriber | null;
+
   /** Executes the reactive logic for this subscriber. */
   run(): void;
   /** Permanently stops the subscriber from reacting to further updates. */
   stop(): void;
+  /** Updates the topological rank of this subscriber, potentially propagating it to downstream dependencies. */
+  updateRank(newRank: number): void;
 }
 
 /**

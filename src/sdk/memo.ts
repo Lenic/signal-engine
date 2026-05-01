@@ -56,19 +56,31 @@ export class Memo<T> extends Subscriber {
       this._observable.rank = this.rank;
 
       // Cleanup unused subscriptions after recomputation
-      if (this.trackingIndex < this.subscriptions.length) {
-        for (let i = this.trackingIndex; i < this.subscriptions.length; i++) {
-          const node = this.subscriptions[i];
-          if (node.list) {
-            node.list.remove(node);
-          }
-        }
-        this.subscriptions.length = this.trackingIndex;
-      }
+      this.finalizeTracking();
 
       this._isDirty = false;
     }
 
     return this._cachedValue;
+  }
+
+  /**
+   * Recursively propagates rank updates downstream to maintain correct topological sorting.
+   *
+   * @param newRank - The new rank to assign to this memo and its observable.
+   */
+  public updateRank(newRank: number): void {
+    if (this.rank < newRank) {
+      this.rank = newRank;
+      this._observable.rank = newRank;
+
+      let current = this._observable.head;
+      while (current) {
+        if (current.subscriber && current.subscriber.rank <= newRank) {
+          current.subscriber.updateRank(newRank + 1);
+        }
+        current = current.next;
+      }
+    }
   }
 }

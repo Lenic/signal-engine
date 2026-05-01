@@ -10,8 +10,8 @@ export class Scheduler {
   /** Indicates whether multiple signal updates are currently being batched. */
   static isBatching: boolean = false;
 
-  /** Queue of subscribers waiting to be executed. */
-  private static updateQueue: ISubscriber[] = [];
+  /** The head of the intrusive linked list acting as our priority queue. */
+  private static queueHead: ISubscriber | null = null;
 
   /** Indicates whether the update queue is currently being processed. */
   private static isProcessingQueue: boolean = false;
@@ -73,12 +73,25 @@ export class Scheduler {
 
   /**
    * Schedules a subscriber to be executed.
+   * Uses an intrusive priority linked list to maintain order by rank.
    *
    * @param subscriber - The subscriber to schedule.
    */
   static scheduleUpdate(subscriber: ISubscriber): void {
-    if (!this.updateQueue.includes(subscriber)) {
-      this.updateQueue.push(subscriber);
+    if (subscriber.isQueued) return;
+    subscriber.isQueued = true;
+
+    // Insert into the priority linked list based on topological rank (ascending)
+    if (!this.queueHead || subscriber.rank < this.queueHead.rank) {
+      subscriber.nextScheduled = this.queueHead;
+      this.queueHead = subscriber;
+    } else {
+      let current = this.queueHead;
+      while (current.nextScheduled && current.nextScheduled.rank <= subscriber.rank) {
+        current = current.nextScheduled;
+      }
+      subscriber.nextScheduled = current.nextScheduled;
+      current.nextScheduled = subscriber;
     }
 
     if (!this.isBatching && !this.isProcessingQueue) {
@@ -92,10 +105,13 @@ export class Scheduler {
   private static processQueue(): void {
     this.isProcessingQueue = true;
     try {
-      while (this.updateQueue.length > 0) {
-        // Sort by rank: lower ranks (upstreams) run first
-        this.updateQueue.sort((a, b) => a.rank - b.rank);
-        const subscriber = this.updateQueue.shift()!;
+      while (this.queueHead) {
+        const subscriber = this.queueHead;
+        this.queueHead = subscriber.nextScheduled;
+        
+        // Reset intrusive pointers and flags
+        subscriber.nextScheduled = null;
+        subscriber.isQueued = false;
 
         // Detect infinite loops in the queue logic
         const count = (this.runCounter.get(subscriber) || 0) + 1;
@@ -108,7 +124,14 @@ export class Scheduler {
       }
     } catch (e) {
       // Clear queue on error to prevent hanging the system
-      this.updateQueue.length = 0;
+      let current = this.queueHead;
+      while (current) {
+        current.isQueued = false;
+        const next = current.nextScheduled;
+        current.nextScheduled = null;
+        current = next;
+      }
+      this.queueHead = null;
       throw e;
     } finally {
       this.isProcessingQueue = false;

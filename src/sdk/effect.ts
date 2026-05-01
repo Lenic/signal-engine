@@ -37,14 +37,6 @@ export class Effect extends Subscriber {
     Scheduler.runWithSubscriber(this, this._task);
 
     // Cleanup unused subscriptions after the run
-    if (this.trackingIndex < this.subscriptions.length) {
-      for (let i = this.trackingIndex; i < this.subscriptions.length; i++) {
-        const node = this.subscriptions[i];
-        if (node.list) {
-          node.list.remove(node);
-        }
-      }
-      this.subscriptions.length = this.trackingIndex;
-    }
+    this.finalizeTracking();
   }
 }
