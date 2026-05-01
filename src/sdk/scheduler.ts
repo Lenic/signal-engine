@@ -33,8 +33,9 @@ export class Scheduler {
    *
    * @param subscriber - The subscriber context to activate.
    * @param task - The task function to execute.
+   * @returns The result of the task execution.
    */
-  static runWithSubscriber(subscriber: ISubscriber, task: () => void): void {
+  static runWithSubscriber<T>(subscriber: ISubscriber, task: () => T): T {
     const previousSubscriber = this.activeSubscriber;
     this.activeSubscriber = subscriber;
 
@@ -44,7 +45,7 @@ export class Scheduler {
     }
 
     try {
-      task();
+      return task();
     } finally {
       this.effectStackDepth--;
       this.activeSubscriber = previousSubscriber;
@@ -120,7 +121,8 @@ export class Scheduler {
         }
         this.runCounter.set(subscriber, count);
 
-        subscriber.run();
+        // 🚀 PULL: Use maybeUpdate to check if dependencies actually changed
+        subscriber.maybeUpdate();
       }
     } catch (e) {
       // Clear queue on error to prevent hanging the system

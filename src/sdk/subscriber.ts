@@ -1,4 +1,4 @@
-import { IDependencyNode, ISubscriber } from './types';
+import { IDependencyNode, ISubscriber, NodeStatus } from './types';
 import { Scheduler } from './scheduler';
 
 /**
@@ -23,6 +23,12 @@ export abstract class Subscriber implements ISubscriber {
   /** The parent subscriber, if this subscriber was created within another context. */
   public parent: ISubscriber | null = null;
 
+  /** The current status of the subscriber within the reactivity system. */
+  public status: NodeStatus = NodeStatus.CLEAN;
+
+  /** Indicates whether the subscriber is currently in its update lifecycle. */
+  public isUpdating: boolean = false;
+
   /** Indicates whether this subscriber is currently in the execution queue. */
   public isQueued: boolean = false;
 
@@ -40,6 +46,56 @@ export abstract class Subscriber implements ISubscriber {
    * Executes the reactive logic for this subscriber. Must be implemented by subclasses.
    */
   public abstract run(): void;
+
+  /**
+   * Ensures the subscriber is up to date by checking its status and polling dependencies if necessary.
+   */
+  public maybeUpdate(): void {
+    if (this.status === NodeStatus.CLEAN) return;
+
+    this.isUpdating = true;
+    try {
+      if (this.status === NodeStatus.CHECK) {
+        // Poll upstream dependencies to see if any have actually changed
+        for (const node of this.subscriptions) {
+          const owner = node.list.owner;
+          if (owner) {
+            // 🚀 OPTIMIZATION: If the dependency is a child and is dirty, just mark ourselves as STALE.
+            // No need to poll the child because we will dispose of it when we re-run anyway.
+            if (this.children.includes(owner) && owner.status !== NodeStatus.CLEAN) {
+              this.status = NodeStatus.STALE;
+            } else {
+              owner.maybeUpdate();
+            }
+          }
+        }
+      }
+
+      if (this.status === NodeStatus.STALE) {
+        // Reset status to CLEAN before running to allow circular triggers to re-mark it as STALE
+        this.status = NodeStatus.CLEAN;
+        this.run();
+      } else {
+        this.status = NodeStatus.CLEAN;
+      }
+    } finally {
+      this.isUpdating = false;
+    }
+  }
+
+  /**
+   * Notifies downstream subscribers about a status change.
+   * Default implementation does nothing; overridden by Memo to propagate CHECK status.
+   *
+   * @param status - The new status of this subscriber.
+   */
+  public notifyDownstream(status: NodeStatus): void {}
+
+  /**
+   * Requests an update from the scheduler.
+   * Default implementation does nothing; overridden by Effect to schedule itself.
+   */
+  public requestUpdate(): void {}
 
   /**
    * Cleans up all existing subscriptions and stops all child subscribers.

@@ -1,6 +1,9 @@
 import { Subscriber } from './subscriber';
 import { Observable } from './observable';
 import { Scheduler } from './scheduler';
+import { NodeStatus } from './types';
+
+const UNINITIALIZED = Symbol('UNINITIALIZED');
 
 /**
  * Represents a computed reactive value that caches its result and only recalculates
@@ -11,10 +14,7 @@ export class Memo<T> extends Subscriber {
   private _task: () => T;
 
   /** The currently cached value. */
-  private _cachedValue!: T;
-
-  /** Indicates whether the cached value is stale and needs recomputation. */
-  private _isDirty: boolean = true;
+  private _cachedValue: T | typeof UNINITIALIZED = UNINITIALIZED;
 
   /** An internal observable used to manage downstream dependencies. */
   private _observable: Observable = new Observable();
@@ -27,41 +27,58 @@ export class Memo<T> extends Subscriber {
   constructor(task: () => T) {
     super();
     this._task = task;
+    this._observable.owner = this;
+    // Memos start as STALE to ensure they run on the first access
+    this.status = NodeStatus.STALE;
   }
 
   /**
-   * Reacts to upstream changes by marking the memo as dirty and notifying downstream subscribers.
+   * Recalculates the memoized value and notifies downstream if the value has changed.
    */
   public run(): void {
-    if (this._isDirty) return; // Already dirty, no need to re-trigger downstream
-    this._isDirty = true;
-    this._observable.trigger();
+    if (!this.active) return;
+
+    const prevValue = this._cachedValue;
+    this.trackingIndex = 0;
+
+    // Execute the task and track dependencies
+    this._cachedValue = Scheduler.runWithSubscriber(this, this._task);
+
+    // Synchronize the dependency list rank with this subscriber's rank
+    this._observable.rank = this.rank;
+
+    // Cleanup unused subscriptions after recomputation
+    this.finalizeTracking();
+
+    // Value Stability Check: Only trigger downstream if the value actually changed
+    if (prevValue === UNINITIALIZED || !Object.is(prevValue, this._cachedValue)) {
+      this._observable.trigger(true);
+    }
   }
 
   /**
-   * Retrieves the computed value, recalculating it if dependencies have changed,
-   * and registers the active subscriber as a dependency.
+   * Retrieves the computed value, ensuring it is up to date via the Push-Pull mechanism.
    */
   public get value(): T {
-    this._observable.track();
+    // 🚀 PULL: Ensure the value is fresh before returning
+    this.maybeUpdate();
 
-    if (this._isDirty) {
-      this.trackingIndex = 0;
-
-      Scheduler.runWithSubscriber(this, () => {
-        this._cachedValue = this._task();
-      });
-
-      // Synchronize the dependency list rank with this subscriber's rank
-      this._observable.rank = this.rank;
-
-      // Cleanup unused subscriptions after recomputation
-      this.finalizeTracking();
-
-      this._isDirty = false;
+    // Register the active subscriber as a dependency of this memo
+    if (Scheduler.activeSubscriber) {
+      this._observable.track();
     }
 
-    return this._cachedValue;
+    return this._cachedValue as T;
+  }
+
+  /**
+   * Notifies downstream subscribers that this memo's value might change.
+   *
+   * @param status - The new status of this memo.
+   */
+  public override notifyDownstream(status: NodeStatus): void {
+    // Propagate a CHECK status to downstream to indicate a potential change
+    this._observable.trigger(false);
   }
 
   /**

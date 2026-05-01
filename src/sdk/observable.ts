@@ -1,4 +1,4 @@
-import { IDependencyNode, IObservable } from './types';
+import { IDependencyNode, IObservable, ISubscriber, NodeStatus } from './types';
 import { DependencyNode } from './dependency';
 import { Scheduler } from './scheduler';
 
@@ -17,6 +17,9 @@ export class Observable implements IObservable {
    * Signals typically have a rank of 0, while Memos inherit the rank of their upstreams.
    */
   public rank: number = 0;
+
+  /** The subscriber that owns this observable. */
+  public owner: ISubscriber | null = null;
 
   /**
    * Tracks the currently active subscriber as a dependency.
@@ -57,15 +60,25 @@ export class Observable implements IObservable {
   }
 
   /**
-   * Triggers updates for all registered subscribers by scheduling them in the batch execution queue.
+   * Triggers updates for all registered subscribers.
+   *
+   * @param isDirectChange - Whether this trigger is caused by a direct value change (Signal) or an indirect one (Memo).
    */
-  public trigger(): void {
+  public trigger(isDirectChange: boolean = true): void {
     Scheduler.batch(() => {
       let current = this.head;
       while (current) {
         const next = current.next;
-        if (current.subscriber) {
-          Scheduler.scheduleUpdate(current.subscriber);
+        const subscriber = current.subscriber;
+        if (subscriber) {
+          const newStatus = isDirectChange ? NodeStatus.STALE : NodeStatus.CHECK;
+
+          // Only update status and notify downstream if the new status is "dirtier" than current
+          if (subscriber.status < newStatus) {
+            subscriber.status = newStatus;
+            subscriber.notifyDownstream(newStatus);
+            subscriber.requestUpdate();
+          }
         }
         current = next;
       }
