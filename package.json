@@ -13,10 +13,13 @@
   ],
   "scripts": {
     "build": "tsdown",
-    "dev": "tsdown --watch"
+    "dev": "tsdown --watch",
+    "test": "vitest",
+    "test:run": "vitest run"
   },
   "devDependencies": {
     "tsdown": "^0.21.7",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.5"
   }
 }

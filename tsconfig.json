@@ -11,6 +11,9 @@
     "declaration": true,
     "noImplicitAny": false,
     "esModuleInterop": true,
+    "types": [
+      "vitest"
+    ]
   },
   "include": [
     "src/**/*"
