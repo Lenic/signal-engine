@@ -30,4 +30,19 @@ describe('Library Tests', () => {
     s.set(3);
     expect(list).toEqual([1, 2, 3]);
   });
+
+  test('effect() - dispose', () => {
+    const s = signal(1);
+
+    const list: number[] = [];
+    const dispose = effect(() => {
+      list.push(s());
+    });
+
+    expect(list).toEqual([1]);
+
+    dispose();
+    s.set(2);
+    expect(list).toEqual([1]);
+  });
 });

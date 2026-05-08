@@ -1,247 +1,249 @@
-import { Signal, Effect, Memo, Scheduler } from './sdk';
+export * from './lib';
 
-const log = {
-  success: (...args: any[]) => console.log('\x1b[32m%s\x1b[0m', ...args),
-  error: (...args: any[]) => console.log('\x1b[31m%s\x1b[0m', ...args),
-  warn: (...args: any[]) => console.log('\x1b[33m%s\x1b[0m', ...args),
-  info: (...args: any[]) => console.log('\x1b[36m%s\x1b[0m', ...args),
-  title: (...args: any[]) => console.log('\n\x1b[1m\x1b[4m%s\x1b[0m', ...args),
-};
+// import { Signal, Effect, Memo, Scheduler } from './sdk';
 
-function test<T>(name: string, fn: () => T, expect: T) {
-  log.title(`\n[TEST] ${name}`);
-  const actual = fn();
+// const log = {
+//   success: (...args: any[]) => console.log('\x1b[32m%s\x1b[0m', ...args),
+//   error: (...args: any[]) => console.log('\x1b[31m%s\x1b[0m', ...args),
+//   warn: (...args: any[]) => console.log('\x1b[33m%s\x1b[0m', ...args),
+//   info: (...args: any[]) => console.log('\x1b[36m%s\x1b[0m', ...args),
+//   title: (...args: any[]) => console.log('\n\x1b[1m\x1b[4m%s\x1b[0m', ...args),
+// };
 
-  if (actual === expect) log.success(`✅ ${name} passed`);
-  else log.error(`❌ ${name} failed: expected ${expect}, got ${actual}`);
-}
+// function test<T>(name: string, fn: () => T, expect: T) {
+//   log.title(`\n[TEST] ${name}`);
+//   const actual = fn();
 
-test('basic reactivity', () => {
-  const count = new Signal(1);
-  let res = 0;
+//   if (actual === expect) log.success(`✅ ${name} passed`);
+//   else log.error(`❌ ${name} failed: expected ${expect}, got ${actual}`);
+// }
 
-  new Effect(() => {
-    res += count.value;
-    log.info('effect:', count.value);
-  });
+// test('basic reactivity', () => {
+//   const count = new Signal(1);
+//   let res = 0;
 
-  count.value = 2;
-  count.value = 3;
+//   new Effect(() => {
+//     res += count.value;
+//     log.info('effect:', count.value);
+//   });
 
-  return res;
-}, 6);
+//   count.value = 2;
+//   count.value = 3;
 
-test('no trigger same value', () => {
-  const count = new Signal(1);
-  let runCount = 0;
+//   return res;
+// }, 6);
 
-  new Effect(() => {
-    runCount++;
-    log.info('run:', count.value);
-  });
+// test('no trigger same value', () => {
+//   const count = new Signal(1);
+//   let runCount = 0;
 
-  count.value = 1;
+//   new Effect(() => {
+//     runCount++;
+//     log.info('run:', count.value);
+//   });
 
-  return runCount;
-}, 1);
+//   count.value = 1;
 
-test('dynamic dependency', () => {
-  const a = new Signal(1);
-  const b = new Signal(10);
-  const flag = new Signal(true);
-  let runCount = 0;
+//   return runCount;
+// }, 1);
 
-  new Effect(() => {
-    runCount++;
-    if (flag.value) {
-      log.info('A:', a.value);
-    } else {
-      log.info('B:', b.value);
-    }
-  });
+// test('dynamic dependency', () => {
+//   const a = new Signal(1);
+//   const b = new Signal(10);
+//   const flag = new Signal(true);
+//   let runCount = 0;
 
-  flag.value = false;
-  b.value = 20;
-  a.value = 999;
+//   new Effect(() => {
+//     runCount++;
+//     if (flag.value) {
+//       log.info('A:', a.value);
+//     } else {
+//       log.info('B:', b.value);
+//     }
+//   });
 
-  return runCount;
-}, 3);
+//   flag.value = false;
+//   b.value = 20;
+//   a.value = 999;
 
-test('nested effect', () => {
-  const a = new Signal(1);
-  let runCount = 0;
+//   return runCount;
+// }, 3);
 
-  new Effect(() => {
-    runCount++;
-    log.info('outer:', a.value);
+// test('nested effect', () => {
+//   const a = new Signal(1);
+//   let runCount = 0;
 
-    new Effect(() => {
-      runCount++;
-      log.info('inner:', a.value);
-    });
-  });
+//   new Effect(() => {
+//     runCount++;
+//     log.info('outer:', a.value);
 
-  a.value = 2;
+//     new Effect(() => {
+//       runCount++;
+//       log.info('inner:', a.value);
+//     });
+//   });
 
-  return runCount;
-}, 4);
+//   a.value = 2;
 
-test('memo lazy', () => {
-  const count = new Signal(1);
-  let computeCount = 0;
+//   return runCount;
+// }, 4);
 
-  const double = new Memo(() => {
-    computeCount++;
-    log.info('compute');
-    return count.value * 2;
-  });
+// test('memo lazy', () => {
+//   const count = new Signal(1);
+//   let computeCount = 0;
 
-  log.info(double.value);
-  log.info(double.value);
+//   const double = new Memo(() => {
+//     computeCount++;
+//     log.info('compute');
+//     return count.value * 2;
+//   });
 
-  count.value = 2;
+//   log.info(double.value);
+//   log.info(double.value);
 
-  log.info(double.value);
+//   count.value = 2;
 
-  return computeCount;
-}, 2);
+//   log.info(double.value);
 
-test('memo chain', () => {
-  const a = new Signal(1);
-  const b = new Memo(() => a.value + 1);
-  const c = new Memo(() => b.value + 1);
-  let runCount = 0;
+//   return computeCount;
+// }, 2);
 
-  new Effect(() => {
-    runCount++;
-    log.info('c:', c.value);
-  });
+// test('memo chain', () => {
+//   const a = new Signal(1);
+//   const b = new Memo(() => a.value + 1);
+//   const c = new Memo(() => b.value + 1);
+//   let runCount = 0;
 
-  a.value = 2;
+//   new Effect(() => {
+//     runCount++;
+//     log.info('c:', c.value);
+//   });
 
-  return runCount;
-}, 2);
+//   a.value = 2;
 
-test('dispose', () => {
-  const count = new Signal(1);
-  let runCount = 0;
+//   return runCount;
+// }, 2);
 
-  const eff = new Effect(() => {
-    runCount++;
-    log.info('run:', count.value);
-  });
+// test('dispose', () => {
+//   const count = new Signal(1);
+//   let runCount = 0;
 
-  eff.stop();
+//   const eff = new Effect(() => {
+//     runCount++;
+//     log.info('run:', count.value);
+//   });
 
-  count.value = 2;
+//   eff.stop();
 
-  return runCount;
-}, 1);
+//   count.value = 2;
 
-test(
-  'infinite loop detect',
-  () => {
-    const count = new Signal(0);
-    let caught = false;
+//   return runCount;
+// }, 1);
 
-    try {
-      new Effect(() => {
-        count.value = count.value + 1;
-      });
-    } catch (e) {
-      caught = true;
-      log.info('caught:', (e as Error).message);
-    }
+// test(
+//   'infinite loop detect',
+//   () => {
+//     const count = new Signal(0);
+//     let caught = false;
 
-    return caught;
-  },
-  true,
-);
+//     try {
+//       new Effect(() => {
+//         count.value = count.value + 1;
+//       });
+//     } catch (e) {
+//       caught = true;
+//       log.info('caught:', (e as Error).message);
+//     }
 
-test('synchronous batching', () => {
-  const a = new Signal(1);
-  const b = new Signal(2);
-  let runCount = 0;
+//     return caught;
+//   },
+//   true,
+// );
 
-  new Effect(() => {
-    log.info('sum:', a.value + b.value);
-    runCount++;
-  });
+// test('synchronous batching', () => {
+//   const a = new Signal(1);
+//   const b = new Signal(2);
+//   let runCount = 0;
 
-  log.info('Starting batch...');
-  Scheduler.batch(() => {
-    a.value = 10;
-    b.value = 20;
-    log.info('Inside batch, should not have triggered yet. runCount:', runCount);
-  });
-  log.info('End of batch. runCount:', runCount);
+//   new Effect(() => {
+//     log.info('sum:', a.value + b.value);
+//     runCount++;
+//   });
 
-  return runCount;
-}, 2);
+//   log.info('Starting batch...');
+//   Scheduler.batch(() => {
+//     a.value = 10;
+//     b.value = 20;
+//     log.info('Inside batch, should not have triggered yet. runCount:', runCount);
+//   });
+//   log.info('End of batch. runCount:', runCount);
 
-test('memo disposal', () => {
-  const source = new Signal(1);
-  let computeCount = 0;
+//   return runCount;
+// }, 2);
 
-  const m = new Memo(() => {
-    computeCount++;
-    return source.value * 2;
-  });
+// test('memo disposal', () => {
+//   const source = new Signal(1);
+//   let computeCount = 0;
 
-  log.info('val:', m.value);
-  source.value = 2;
-  log.info('val:', m.value);
+//   const m = new Memo(() => {
+//     computeCount++;
+//     return source.value * 2;
+//   });
 
-  m.stop();
-  source.value = 3;
-  log.info('After dispose, val:', m.value);
-  log.info('Compute count after dispose:', computeCount);
+//   log.info('val:', m.value);
+//   source.value = 2;
+//   log.info('val:', m.value);
 
-  return computeCount;
-}, 2);
+//   m.stop();
+//   source.value = 3;
+//   log.info('After dispose, val:', m.value);
+//   log.info('Compute count after dispose:', computeCount);
 
-test('automatic cleanup', () => {
-  const source = new Signal(1);
-  let memoComputeCount = 0;
+//   return computeCount;
+// }, 2);
 
-  const eff = new Effect(() => {
-    const m = new Memo(() => {
-      memoComputeCount++;
-      return source.value;
-    });
-    log.info('effect uses memo:', m.value);
-  });
+// test('automatic cleanup', () => {
+//   const source = new Signal(1);
+//   let memoComputeCount = 0;
 
-  source.value = 2;
-  log.info('memoComputeCount:', memoComputeCount);
+//   const eff = new Effect(() => {
+//     const m = new Memo(() => {
+//       memoComputeCount++;
+//       return source.value;
+//     });
+//     log.info('effect uses memo:', m.value);
+//   });
 
-  eff.stop();
-  source.value = 3;
-  log.info('After effect stop, memoComputeCount should not increase. count:', memoComputeCount);
+//   source.value = 2;
+//   log.info('memoComputeCount:', memoComputeCount);
 
-  return memoComputeCount;
-}, 2);
+//   eff.stop();
+//   source.value = 3;
+//   log.info('After effect stop, memoComputeCount should not increase. count:', memoComputeCount);
 
-test('diamond dependency (glitch)', () => {
-  const s = new Signal(1);
-  const m1 = new Memo(() => {
-    log.info('  [Compute M1]');
-    return s.value + 1;
-  });
-  const m2 = new Memo(() => {
-    log.info('  [Compute M2]');
-    return s.value + 2;
-  });
+//   return memoComputeCount;
+// }, 2);
 
-  let effectRunCount = 0;
-  new Effect(() => {
-    effectRunCount++;
-    log.info('  [Effect Run] sum:', m1.value + m2.value);
-  });
+// test('diamond dependency (glitch)', () => {
+//   const s = new Signal(1);
+//   const m1 = new Memo(() => {
+//     log.info('  [Compute M1]');
+//     return s.value + 1;
+//   });
+//   const m2 = new Memo(() => {
+//     log.info('  [Compute M2]');
+//     return s.value + 2;
+//   });
 
-  log.info('--- updating s.value = 10 ---');
-  s.value = 10;
-  log.info('Final effectRunCount:', effectRunCount);
+//   let effectRunCount = 0;
+//   new Effect(() => {
+//     effectRunCount++;
+//     log.info('  [Effect Run] sum:', m1.value + m2.value);
+//   });
 
-  return effectRunCount;
-}, 2);
+//   log.info('--- updating s.value = 10 ---');
+//   s.value = 10;
+//   log.info('Final effectRunCount:', effectRunCount);
+
+//   return effectRunCount;
+// }, 2);

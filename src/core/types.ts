@@ -48,7 +48,7 @@ export interface ISubscriber extends IDisposable {
 /**
  * Represents an entity that can be observed and notifies its subscribers when it changes.
  */
-export interface IObservable extends IDisposable {
+export interface IObservable {
   /** The list of subscribers currently observing this observable. */
   subscribers: ILinkedList<ISubscriber>;
 

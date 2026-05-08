@@ -24,6 +24,27 @@ export class Subscriber extends Disposable implements ISubscriber {
   }
 
   run(): void {
+    if (this.isDisposed) return;
+
     scheduler.run(this, this.runAction);
+  }
+
+  dispose(): void {
+    if (this.isDisposed) return;
+
+    super.dispose();
+
+    let node = this.dependencies.head;
+    while (node) {
+      node.value.subscriberNode.removeSelf();
+      node.removeSelf();
+      node = this.dependencies.head;
+    }
+    this.dependencies.clear();
+
+    this.version = undefined as unknown as number;
+    this.dependencies = undefined as unknown as ILinkedList<IConnector>;
+    this.currentConnector = undefined as unknown as ILinkedNode<IConnector>;
+    this.runAction = undefined as unknown as () => void;
   }
 }

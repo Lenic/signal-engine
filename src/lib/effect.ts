@@ -8,7 +8,7 @@ import { scheduler, Subscriber } from '../core';
 export function effect(fn: () => void) {
   const subscriber = new Subscriber(fn);
 
-  scheduler.run(subscriber, fn);
+  subscriber.run();
 
   return () => subscriber.dispose();
 }

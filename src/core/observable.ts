@@ -1,19 +1,12 @@
 import { ILinkedList, LinkedList } from '../utils';
-import { Disposable } from './disposable';
 import { IObservable, ISubscriber } from './types';
 import { scheduler } from './scheduler';
 
-export class Observable extends Disposable implements IObservable {
+export class Observable implements IObservable {
   subscribers: ILinkedList<ISubscriber>;
 
   constructor() {
-    super();
-
     this.subscribers = new LinkedList<ISubscriber>();
-    this.disposeWithMe(() => {
-      this.subscribers.clear();
-      this.subscribers = undefined as unknown as ILinkedList<ISubscriber>;
-    });
   }
 
   track(): void {
