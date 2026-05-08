@@ -21,15 +21,15 @@ describe('LinkedList (With Global Node Pooling)', () => {
     const n2 = list.add('b');
     const n3 = list.add('c');
 
-    n2.remove(); // 删除中间节点
+    n2.removeSelf(); // 删除中间节点
 
     expect(list.size).toBe(2);
     expect(list.toArray()).toEqual(['a', 'c']);
 
-    n1.remove(); // 删除头节点
+    n1.removeSelf(); // 删除头节点
     expect(list.toArray()).toEqual(['c']);
 
-    n3.remove(); // 删除尾节点（最后一个节点）
+    n3.removeSelf(); // 删除尾节点（最后一个节点）
     expect(list.size).toBe(0);
     expect(list.toArray()).toEqual([]);
   });
@@ -61,7 +61,7 @@ describe('LinkedList (With Global Node Pooling)', () => {
     // 1. 添加并删除一个节点，使其进入对象池
     const node1 = list.add(10);
     const node1Ref = node1; // 记录引用
-    node1.remove();
+    node1.removeSelf();
 
     // 验证节点已被清理（通过接口无法直接访问，但逻辑上它已回池）
     expect(node1.value).toBeUndefined();
@@ -81,7 +81,7 @@ describe('LinkedList (With Global Node Pooling)', () => {
     const strList = new LinkedList<string>();
 
     const n1 = numList.add(123);
-    n1.remove(); // number 节点回池
+    n1.removeSelf(); // number 节点回池
 
     const s1 = strList.add('hello'); // 应该复用之前的那个节点对象
 
@@ -101,7 +101,7 @@ describe('LinkedList (With Global Node Pooling)', () => {
 
     // 随机删除一半
     for (let i = 0; i < 50; i++) {
-      nodes[i].remove();
+      nodes[i].removeSelf();
     }
     expect(list.size).toBe(50);
     expect(list.toArray()[0]).toBe(50); // 因为前 50 个删了，现在第一个应该是 50
