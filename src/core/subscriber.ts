@@ -7,6 +7,8 @@ import type { IConnector, ISubscriber } from './types';
  * 负责执行 effect
  */
 export class Subscriber extends Disposable implements ISubscriber {
+  private isExecuting: boolean;
+
   version: number;
   children: ILinkedList<ISubscriber> | null;
   dependencies: ILinkedList<IConnector>;
@@ -17,6 +19,8 @@ export class Subscriber extends Disposable implements ISubscriber {
 
   constructor(runAction: () => void) {
     super();
+
+    this.isExecuting = false;
 
     this.version = 0;
     this.children = null;
@@ -42,6 +46,8 @@ export class Subscriber extends Disposable implements ISubscriber {
     scheduler.activeSubscriber = this;
 
     try {
+      this.isExecuting = true;
+
       // Reset the tracking pointer to the start of the dependency list
       this.currentConnector = this.dependencies.head;
 
@@ -60,12 +66,18 @@ export class Subscriber extends Disposable implements ISubscriber {
       }
       this.currentConnector = null;
     } finally {
+      this.isExecuting = false;
+
       this.scheduledNode = null;
       scheduler.activeSubscriber = prev;
     }
   }
 
   scheduleUpdate(): void {
+    if (this.isExecuting) {
+      throw new Error('[Subscriber]: Infinite loop detected!!!');
+    }
+
     if (this.scheduledNode || this.isDisposed) return;
 
     this.scheduledNode = scheduler.dirtySubscribers.add(this);

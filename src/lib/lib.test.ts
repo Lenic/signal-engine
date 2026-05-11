@@ -49,6 +49,21 @@ describe('Library', () => {
       expect(list).toEqual([1, 4]);
       expect(count()).toBe(4);
     });
+
+    test('infinite loop detect', () => {
+      const count = signal(0);
+      let caught = false;
+
+      try {
+        effect(() => {
+          count.set(count() + 1);
+        });
+      } catch (e) {
+        caught = true;
+      }
+
+      expect(caught).toBe(true);
+    });
   });
 
   describe('effect', () => {
