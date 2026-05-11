@@ -34,6 +34,8 @@ export interface IConnector {
 export interface ISubscriber extends IDisposable {
   /** The current version of the subscriber, incremented on each run. */
   version: number;
+  /** The children subscribers of this subscriber. */
+  children: ILinkedList<ISubscriber> | null;
   /** The list of observables this subscriber currently depends on. */
   dependencies: ILinkedList<IConnector>;
   /** The current connector being processed during the tracking phase. */
@@ -43,6 +45,10 @@ export interface ISubscriber extends IDisposable {
    * Executes the subscriber's logic, tracking any observables accessed during execution.
    */
   run(): void;
+  /**
+   * Schedules the subscriber to be processed by the scheduler.
+   */
+  scheduleUpdate(): void;
 }
 
 /**
@@ -63,23 +69,30 @@ export interface IObservable {
   trigger(): void;
 }
 
-/**
- *
- */
+export const ETaskStatus = {
+  IDLE: 'idle',
+  UPDATING: 'updating',
+  RUNNING: 'running',
+} as const;
+export type ETaskStatus = (typeof ETaskStatus)[keyof typeof ETaskStatus];
+
 export interface IScheduler {
+  /** The status of the scheduler. */
+  taskStatus: ETaskStatus;
   /** The currently active subscriber being processed. */
   activeSubscriber: ISubscriber | null;
+  /** The list of subscribers that are queued to be processed. */
+  dirtySubscribers: ILinkedList<ISubscriber>;
+
   /**
-   * Runs the given action with the specified subscriber, tracking any dependencies.
-   * @param subscriber The subscriber to run the action with.
-   * @param action The action to execute.
+   * Runs a task in the scheduler's context.
+   * @param action The task to run.
    */
-  run<T>(subscriber: ISubscriber, action: () => T): T;
+  batch(action: () => void): void;
   /**
-   * Tracks the given observable by registering the active subscriber as a dependency.
-   * @param observable The observable to track.
+   * Flushes the dirty subscribers.
    */
-  track(observable: IObservable): void;
+  flush(): void;
 }
 
 /**

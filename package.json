@@ -15,7 +15,8 @@
     "build": "tsdown",
     "dev": "tsdown --watch",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "test:dev": "vitest --inspect-brk --no-file-parallelism"
   },
   "devDependencies": {
     "tsdown": "^0.21.7",

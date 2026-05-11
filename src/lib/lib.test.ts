@@ -86,25 +86,25 @@ describe('Library Tests', () => {
       expect(list).toEqual([1, 10, 20]);
     });
 
-    // test('nested effect', () => {
-    //   const a = signal(1);
-    //   let runCount = 0;
+    test('nested effect', () => {
+      const a = signal(1);
+      let runCount = 0;
 
-    //   const list: number[] = [];
-    //   effect(() => {
-    //     runCount++;
-    //     list.push(a());
+      const list: number[] = [];
+      effect(() => {
+        runCount++;
+        list.push(a());
 
-    //     effect(() => {
-    //       runCount++;
-    //       list.push(a());
-    //     });
-    //   });
+        effect(() => {
+          runCount++;
+          list.push(a());
+        });
+      });
 
-    //   a.set(2);
+      a.set(2);
 
-    //   expect(runCount).toBe(4);
-    //   expect(list).toEqual([1, 1, 2, 2]);
-    // });
+      expect(runCount).toBe(4);
+      expect(list).toEqual([1, 1, 2, 2]);
+    });
   });
 });
