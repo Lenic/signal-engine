@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { signal } from './signal';
 import { effect } from './effect';
 import { memo } from './memo';
-import { scheduler } from '../core';
+import { scheduler } from './core';
 
 describe('Library', () => {
   describe('signal', () => {

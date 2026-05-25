@@ -1,4 +1,4 @@
-import { Subscriber } from '../core';
+import { Subscriber } from './core';
 
 /**
  * Creates an effect that runs the given function and automatically disposes when the function is no longer needed.

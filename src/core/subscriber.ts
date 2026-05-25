@@ -1,5 +1,4 @@
-import { ILinkedList, ILinkedNode, LinkedList } from '../utils';
-import { Disposable } from './disposable';
+import { Disposable, ILinkedList, ILinkedNode, LinkedList } from '../utils';
 import { scheduler } from './scheduler';
 import type { IConnector, ISubscriber } from './types';
 

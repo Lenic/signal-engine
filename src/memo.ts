@@ -1,12 +1,5 @@
-import {
-  Disposable,
-  IDisposable,
-  IObservable,
-  IReadonlySignalValue,
-  ISubscriber,
-  Observable,
-  Subscriber,
-} from '../core';
+import { IObservable, IReadonlySignalValue, ISubscriber, Observable, Subscriber } from './core';
+import { Disposable, IDisposable } from './utils';
 
 /**
  * Creates a computed signal that lazily evaluates and memoizes the result of the provided function.

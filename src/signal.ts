@@ -1,4 +1,4 @@
-import { ISignalValue, Observable } from '../core';
+import { ISignalValue, Observable } from './core';
 
 /**
  * Creates a signal with the given initial value.
