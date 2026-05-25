@@ -252,6 +252,23 @@ describe('Library', () => {
       expect(runCount).toBe(2);
     });
 
+    test('dispose', () => {
+      const a = signal(1);
+      let runCount = 0;
+      const m = memo(() => {
+        runCount += 1;
+        return a() * 2;
+      });
+
+      expect(m()).toBe(2);
+      expect(runCount).toBe(1);
+
+      m.dispose();
+      a.set(2);
+      expect(m()).toBe(2);
+      expect(runCount).toBe(1);
+    });
+
     test('with effect', () => {
       const a = signal(1);
       let memoRunCount = 0;

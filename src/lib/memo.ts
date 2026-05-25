@@ -1,4 +1,12 @@
-import { IObservable, IReadonlySignalValue, ISubscriber, Observable, Subscriber } from '../core';
+import {
+  Disposable,
+  IDisposable,
+  IObservable,
+  IReadonlySignalValue,
+  ISubscriber,
+  Observable,
+  Subscriber,
+} from '../core';
 
 /**
  * Creates a computed signal that lazily evaluates and memoizes the result of the provided function.
@@ -9,7 +17,7 @@ import { IObservable, IReadonlySignalValue, ISubscriber, Observable, Subscriber 
  * @param fn The function to compute the signal's value.
  * @returns A read-only signal representing the memoized value.
  */
-export function memo<T>(fn: () => T): IReadonlySignalValue<T> {
+export function memo<T>(fn: () => T): IReadonlySignalValue<T> & IDisposable {
   let value: T;
   let isDirty = true;
 
@@ -31,5 +39,12 @@ export function memo<T>(fn: () => T): IReadonlySignalValue<T> {
     return value;
   }
 
-  return getter;
+  const disposable = new Disposable();
+  disposable.disposeWithMe(subscriber);
+
+  const result = getter as IReadonlySignalValue<T> & IDisposable;
+  result.dispose = () => void disposable.dispose();
+  result.disposeWithMe = (fn) => void disposable.disposeWithMe(fn);
+
+  return result;
 }
