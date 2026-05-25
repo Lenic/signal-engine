@@ -364,4 +364,113 @@ describe('Library', () => {
       expect(sum).toBe(23);
     });
   });
+
+  describe('batch', () => {
+    test('basic', () => {
+      const a = signal(1);
+      const b = signal(2);
+
+      let effectRunCount = 0;
+      const list: number[] = [];
+      effect(() => {
+        effectRunCount++;
+        list.push(a() + b());
+      });
+
+      expect(list).toEqual([3]);
+      expect(effectRunCount).toBe(1);
+
+      scheduler.batch(() => {
+        a.set(2);
+        b.set(3);
+      });
+
+      expect(list).toEqual([3, 5]);
+      expect(effectRunCount).toBe(2);
+    });
+
+    test('nested batch', () => {
+      const a = signal(1);
+      const b = signal(2);
+
+      let effectRunCount = 0;
+      const list: number[] = [];
+      effect(() => {
+        effectRunCount++;
+        list.push(a() + b());
+      });
+
+      expect(list).toEqual([3]);
+      expect(effectRunCount).toBe(1);
+
+      scheduler.batch(() => {
+        scheduler.batch(() => {
+          a.set(2);
+          b.set(3);
+        });
+        b.set(4);
+      });
+
+      expect(list).toEqual([3, 6]);
+      expect(effectRunCount).toBe(2);
+    });
+
+    test('with dispose', () => {
+      const a = signal(1);
+      const b = signal(2);
+
+      let effectRunCount = 0;
+      const list: number[] = [];
+      const dispose = effect(() => {
+        effectRunCount++;
+        list.push(a() + b());
+      });
+
+      expect(list).toEqual([3]);
+      expect(effectRunCount).toBe(1);
+
+      dispose();
+      scheduler.batch(() => {
+        a.set(2);
+        b.set(3);
+      });
+
+      expect(list).toEqual([3]);
+      expect(effectRunCount).toBe(1);
+    });
+
+    test('with memo', () => {
+      const a = signal(1);
+      const b = signal(2);
+
+      let memoRunCount = 0;
+      const m = memo(() => {
+        memoRunCount++;
+        return a() + b();
+      });
+
+      expect(m()).toBe(3);
+      expect(memoRunCount).toBe(1);
+
+      let effectRunCount = 0;
+      const list: number[] = [];
+      effect(() => {
+        effectRunCount++;
+        list.push(m());
+      });
+
+      expect(list).toEqual([3]);
+      expect(effectRunCount).toBe(1);
+      expect(memoRunCount).toBe(1);
+
+      scheduler.batch(() => {
+        a.set(2);
+        b.set(3);
+      });
+
+      expect(list).toEqual([3, 5]);
+      expect(effectRunCount).toBe(2);
+      expect(memoRunCount).toBe(2);
+    });
+  });
 });
