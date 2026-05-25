@@ -43,8 +43,10 @@ export interface ISubscriber extends IDisposable {
 
   /**
    * Executes the subscriber's logic, tracking any observables accessed during execution.
+   *
+   * @param customAction Optional custom action to run instead of the default action.
    */
-  run(): void;
+  run(customAction?: () => void): void;
   /**
    * Schedules the subscriber to be processed by the scheduler.
    */

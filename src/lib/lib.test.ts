@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { signal } from './signal';
 import { effect } from './effect';
+import { memo } from './memo';
 import { scheduler } from '../core';
 
 describe('Library', () => {
@@ -201,6 +202,115 @@ describe('Library', () => {
       expect(runCount).toBe(4);
       expect(list).toEqual([1, 2]);
       expect(list2).toEqual([1, 2]);
+    });
+  });
+
+  describe('memo', () => {
+    test('basic', () => {
+      const a = signal(1);
+      const b = signal(2);
+
+      let runCount = 0;
+      const m = memo(() => {
+        runCount += 1;
+        return a() + b();
+      });
+
+      expect(m()).toBe(3);
+      expect(runCount).toBe(1);
+
+      a.set(2);
+      expect(m()).toBe(4);
+      expect(runCount).toBe(2);
+    });
+
+    test('lazy evaluation', () => {
+      const a = signal(1);
+      let runCount = 0;
+      const m = memo(() => {
+        runCount += 1;
+        return a() * 2;
+      });
+
+      // Not read yet, should not run
+      expect(runCount).toBe(0);
+
+      // Read once
+      expect(m()).toBe(2);
+      expect(runCount).toBe(1);
+
+      // Read again, should not run again
+      expect(m()).toBe(2);
+      expect(runCount).toBe(1);
+
+      // Dependency changes, but memo is not read, should not run
+      a.set(2);
+      expect(runCount).toBe(1);
+
+      // Read after dependency change
+      expect(m()).toBe(4);
+      expect(runCount).toBe(2);
+    });
+
+    test('with effect', () => {
+      const a = signal(1);
+      let memoRunCount = 0;
+      const m = memo(() => {
+        memoRunCount++;
+        return a() * 2;
+      });
+
+      let effectRunCount = 0;
+      const list: number[] = [];
+      effect(() => {
+        effectRunCount++;
+        list.push(m());
+      });
+
+      expect(memoRunCount).toBe(1);
+      expect(effectRunCount).toBe(1);
+      expect(list).toEqual([2]);
+
+      a.set(2);
+      expect(memoRunCount).toBe(2);
+      expect(effectRunCount).toBe(2);
+      expect(list).toEqual([2, 4]);
+    });
+
+    test('dynamic dependency', () => {
+      const a = signal(1);
+      const b = signal(2);
+      const flag = signal(true);
+
+      let runCount = 0;
+      const m = memo(() => {
+        runCount++;
+        return flag() ? a() : b();
+      });
+
+      expect(m()).toBe(1);
+      expect(runCount).toBe(1);
+
+      // Change unused dependency
+      b.set(3);
+      // It shouldn't trigger re-evaluation because b is not tracked
+      expect(m()).toBe(1);
+      expect(runCount).toBe(1);
+
+      // Change flag
+      flag.set(false);
+      expect(m()).toBe(3);
+      expect(runCount).toBe(2);
+
+      // Change newly used dependency
+      b.set(4);
+      expect(m()).toBe(4);
+      expect(runCount).toBe(3);
+
+      // Change previously used dependency
+      a.set(99);
+      expect(m()).toBe(4);
+      expect(runCount).toBe(3);
     });
   });
 });

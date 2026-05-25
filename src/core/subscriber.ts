@@ -39,7 +39,7 @@ export class Subscriber extends Disposable implements ISubscriber {
     }
   }
 
-  run(): void {
+  run(customAction?: () => void): void {
     this.checkDisposed();
 
     const prev = scheduler.activeSubscriber;
@@ -53,7 +53,11 @@ export class Subscriber extends Disposable implements ISubscriber {
 
       this.disposeChildren();
       this.version += 1;
-      this.runAction();
+      if (customAction) {
+        customAction();
+      } else {
+        this.runAction();
+      }
 
       // Cleanup phase: remove any connectors that were not visited during the run
       let staleNode = this.currentConnector;
