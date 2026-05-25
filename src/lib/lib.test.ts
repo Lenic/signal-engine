@@ -312,5 +312,39 @@ describe('Library', () => {
       expect(m()).toBe(4);
       expect(runCount).toBe(3);
     });
+
+    test('diamond dependency (glitch)', () => {
+      const s = signal(1);
+
+      let runCount1 = 0;
+      const m1 = memo(() => {
+        runCount1 += 1;
+        return s() + 1;
+      });
+
+      let runCount2 = 0;
+      const m2 = memo(() => {
+        runCount2 += 1;
+        return s() + 2;
+      });
+
+      let effectRunCount = 0;
+      let sum = 0;
+      effect(() => {
+        effectRunCount++;
+        sum = m1() + m2();
+      });
+
+      expect(sum).toBe(5);
+      expect(runCount1).toBe(1);
+      expect(runCount2).toBe(1);
+      expect(effectRunCount).toBe(1);
+
+      s.set(10);
+      expect(runCount1).toBe(2);
+      expect(runCount2).toBe(2);
+      expect(effectRunCount).toBe(2);
+      expect(sum).toBe(23);
+    });
   });
 });
