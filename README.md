@@ -3,7 +3,7 @@
 A lightweight, robust, high-performance, and type-safe Signals reactive engine built with TypeScript.
 
 [![NPM Version](https://img.shields.io/npm/v/@lenic/signal?color=blue&style=flat-square)](https://www.npmjs.com/package/@lenic/signal)
-[![License](https://img.shields.io/github/license/leniclei/signal-engine?color=green&style=flat-square)](https://github.com/leniclei/signal-engine/blob/main/LICENSE)
+[![License](https://img.shields.io/npm/l/@lenic/signal?color=green&style=flat-square)](https://github.com/Lenic/signal-engine/blob/main/LICENSE)
 [![NPM Downloads](https://img.shields.io/npm/dm/@lenic/signal?color=gradient&style=flat-square)](https://www.npmjs.com/package/@lenic/signal)
 
 ---
