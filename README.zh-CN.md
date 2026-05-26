@@ -9,10 +9,9 @@
 ---
 
 🌐 **Languages / 多语言**:
-* **[English (英文)](./README.md)**
-* **[日本語 (日语)](./README.ja.md)**
 
-📦 **NPM 官方包地址**: [https://www.npmjs.com/package/@lenic/signal](https://www.npmjs.com/package/@lenic/signal)
+- **[English (英文)](./README.md)**
+- **[日本語 (日语)](./README.ja.md)**
 
 ---
 
@@ -23,55 +22,71 @@
 与许多庞杂的响应式框架不同，`@lenic/signal` 精准地聚焦于**确定性的同步调度**与**极其苛刻的内存管理**。它非常适合被嵌入到前端框架、通用工具库、或者纯原生 JS/TS 应用中。
 
 ### 核心技术亮点
-*   🚀 **双向链表依赖图 (Doubly Linked List)**：与市面上大多数使用数组存储订阅者的库不同，本项目在底层使用自定义的**双向链表** (`LinkedList` 与 `LinkedNode`) 存储并管理连接器 (`IConnector`)。这使得动态依赖发生改变、释放陈旧订阅关系时的操作达到 **$O(1)$ 时间复杂度**，完全规避了传统数组重新分配内存和 `splice` 移位的性能开销。
-*   🔄 **确定性的同步批量更新 (Synchronous Batching)**：提供纯同步的 `batch()` 批量更新调度器。在 `batch` 块执行结束时，通过 `try-finally` 机制**立即同步触发** `flush()` 完成更新，不依赖微任务 (Microtask) 或宏任务 (Macrotask)，从而保持了可预测性极高的同步执行流，避免了异步带来的时序不确定性与调试难度。
-*   🧹 **完美的层级生命周期管理 (避免内存泄漏)**：实现了精密的树状自动清理系统。凡是在活跃作用域（例如嵌套的 `effect` 或计算值 `memo`）内创建的子订阅者，都会自动注册在父级订阅者名下。当父级被重新执行或被销毁 (`dispose`) 时，其下的所有子级订阅都会**递归且干净地自动销毁**，从根本上杜绝了闭包引起的内存泄漏。
+
+- 🚀 **双向链表依赖图 (Doubly Linked List)**：与市面上大多数使用数组存储订阅者的库不同，本项目在底层使用自定义的**双向链表** (`LinkedList` 与 `LinkedNode`) 存储并管理连接器 (`IConnector`)。这使得动态依赖发生改变、释放陈旧订阅关系时的操作达到 **$O(1)$ 时间复杂度**，完全规避了传统数组重新分配内存和 `splice` 移位的性能开销。
+- 🔄 **确定性的同步批量更新 (Synchronous Batching)**：提供纯同步的 `batch()` 批量更新调度器。在 `batch` 块执行结束时，通过 `try-finally` 机制**立即同步触发** `flush()` 完成更新，不依赖微任务 (Microtask) 或宏任务 (Macrotask)，从而保持了可预测性极高的同步执行流，避免了异步带来的时序不确定性与调试难度。
+- 🧹 **完美的层级生命周期管理 (避免内存泄漏)**：实现了精密的树状自动清理系统。凡是在活跃作用域（例如嵌套的 `effect` 或计算值 `memo`）内创建的子订阅者，都会自动注册在父级订阅者名下。当父级被重新执行或被销毁 (`dispose`) 时，其下的所有子级订阅都会**递归且干净地自动销毁**，从根本上杜绝了闭包引起的内存泄漏。
 
 ---
 
 ## 📐 架构设计与流程
 
 `@lenic/signal` 的响应式环路主要依赖于以下四个核心抽象：
+
 1.  **Observable (可观察源)**：持有可被追踪的值或动作（如 `Signal` 或 `Memo`）。
 2.  **Subscriber (订阅者)**：执行响应式逻辑的容器环境（如 `Effect` 的运行期或 `Memo` 的评估器）。
 3.  **Connector (连接器 `IConnector`)**：双向链表构成的桥梁，用于建立并维护 Observable 与 Subscriber 之间 $O(1)$ 的关联关系。
 4.  **Scheduler (调度器)**：控制更新队列，实现同步批量更新。
 
 ```mermaid
-flowchart TD
-    subgraph Reactive States "响应式状态源 (Observables)"
-        S[只读/读写 Signal] -->|getter() / track| O[Observable 实例]
-        M[计算属性 Memo] -->|getter() / track| O
-    end
+classDiagram
+    class IDisposable {
+        <<interface>>
+        +dispose() void
+        +disposeWithMe(disposable) void
+    }
 
-    subgraph Dependency Graph "双向链表依赖图"
-        O <-->|订阅者链表 subscribers| SN[链表节点 SN]
-        SN <-->|连接指向| SUB[Subscriber 订阅者]
-        SUB <-->|依赖链表 dependencies| CN[连接器节点 CN]
-        CN <-->|连接指向| O
-    end
+    class IObservable {
+        <<interface>>
+        +ILinkedList~ISubscriber~ subscribers
+        +track() void
+        +trigger() void
+    }
 
-    subgraph Side Effects "副作用与逻辑容器 (Subscribers)"
-        SUB -->|runAction()| E[Effect 副作用函数]
-        SUB -->|customAction()| M
-        
-        ParentSUB[父级订阅者] -->|拥有并递归销毁| ChildSUB[子级订阅者]
-    end
+    class ISubscriber {
+        <<interface>>
+        +number version
+        +ILinkedList~ISubscriber~ children
+        +ILinkedList~IConnector~ dependencies
+        +ILinkedNode~IConnector~ currentConnector
+        +run(customAction) void
+        +scheduleUpdate() void
+    }
 
-    subgraph Scheduler Box "执行控制器 (Scheduler)"
-        SUB -->|scheduleUpdate()| DB[dirtySubscribers 脏队列]
-        DB -->|flush() / 同步 flush| SUB
-        
-        B[batch 批量执行] -->|1. 运行任务| Action
-        Action -->|修改多个 Signal| S
-        B -->|2. Finally 块 / 立即同步| DB
-    end
+    class IConnector {
+        <<interface>>
+        +number lastVersion
+        +IObservable observable
+        +ILinkedNode~ISubscriber~ subscriberNode
+    }
 
-    style S fill:#ff9f43,stroke:#333,stroke-width:2px,color:#fff
-    style M fill:#54a0ff,stroke:#333,stroke-width:2px,color:#fff
-    style O fill:#5f27cd,stroke:#333,stroke-width:2px,color:#fff
-    style SUB fill:#10ac84,stroke:#333,stroke-width:2px,color:#fff
-    style B fill:#ee5253,stroke:#333,stroke-width:2px,color:#fff
+    class IScheduler {
+        <<interface>>
+        +ETaskStatus taskStatus
+        +ISubscriber activeSubscriber
+        +ILinkedList~ISubscriber~ dirtySubscribers
+        +batch(action) void
+        +flush() void
+    }
+
+    IDisposable <|-- ISubscriber
+    ISubscriber *-- IConnector : dependencies
+    IConnector --> IObservable : observable
+    IObservable *-- ISubscriber : subscribers
+    IConnector --> ISubscriber : subscriberNode
+    ISubscriber *-- ISubscriber : children
+    IScheduler --> ISubscriber : activeSubscriber
+    IScheduler *-- ISubscriber : dirtySubscribers
 ```
 
 ---
@@ -96,9 +111,11 @@ yarn add @lenic/signal
 ## 🛠️ API 参考与代码示例
 
 ### 1. `signal(initialValue)`
+
 创建一个持值的可读写 Signal。
-*   **读取值**：直接调用函数本身：`count()`。
-*   **更新值**：调用其 `.set(value)` 方法：`count.set(newValue)`。
+
+- **读取值**：直接调用函数本身：`count()`。
+- **更新值**：调用其 `.set(value)` 方法：`count.set(newValue)`。
 
 ```typescript
 import { signal } from '@lenic/signal';
@@ -114,8 +131,10 @@ console.log(count()); // 输出: 5
 ```
 
 ### 2. `effect(fn)`
+
 创建一个订阅者，立即运行 `fn`，自动收集所访问 Signal 的依赖关系，并在这些依赖项的值变化时自动重新运行。
-*   **返回值**：一个清理函数 `() => void`，用于销毁该 effect 订阅。
+
+- **返回值**：一个清理函数 `() => void`，用于销毁该 effect 订阅。
 
 ```typescript
 import { signal, effect } from '@lenic/signal';
@@ -138,9 +157,11 @@ count.set(2); // (无任何输出)
 ```
 
 ### 3. `memo(fn)`
+
 创建一个只读的计算信号，采用惰性求值 (Lazy Evaluation) 并对结果进行缓存 (Memoization)。
-*   **惰性与缓存**：只有在其依赖项改变**且**当前值被实际读取时，它才会重新计算。
-*   **返回值**：一个包含 `.dispose()` 和 `.disposeWithMe(disposable)` 的只读信号。
+
+- **惰性与缓存**：只有在其依赖项改变**且**当前值被实际读取时，它才会重新计算。
+- **返回值**：一个包含 `.dispose()` 和 `.disposeWithMe(disposable)` 的只读信号。
 
 ```typescript
 import { signal, memo } from '@lenic/signal';
@@ -158,7 +179,7 @@ console.log(double()); // 输出: "计算中..." -> 20
 console.log(double()); // 输出: 20
 
 // 改变依赖项
-count.set(20); 
+count.set(20);
 
 // 值被标记为 dirty（脏），下次读取时会重新计算
 console.log(double()); // 输出: "计算中..." -> 40
@@ -168,8 +189,10 @@ double.dispose();
 ```
 
 ### 4. `batch(action)`
+
 用于合并多个 Signal 的修改动作，合并后仅在 block 执行结束时同步触发一次订阅者更新，避免冗余更新带来的性能损耗。
-*   **运行机制**：完全同步。在 `batch` 中的动作执行完后，立即在 `finally` 块里**同步**调用 `flush`。
+
+- **运行机制**：完全同步。在 `batch` 中的动作执行完后，立即在 `finally` 块里**同步**调用 `flush`。
 
 ```typescript
 import { signal, effect, batch } from '@lenic/signal';
@@ -181,11 +204,11 @@ effect(() => {
   console.log(`更新结果: ${name()} - ${count()}`);
 }); // 输出: "更新结果: A - 0"
 
-// 如果不使用 batch，下面会触发两次 effect 执行
+// 使用 batch 合并多次更新
 batch(() => {
   name.set('B'); // 暂不触发 effect
   count.set(100); // 暂不触发 effect
-}); 
+});
 
 // 输出: "更新结果: B - 100" (在 batch 结束时，仅同步执行了一次)
 ```
@@ -206,7 +229,7 @@ const innerSignal = signal(100);
 
 const disposeOuter = effect(() => {
   console.log(`外层 Signal: ${outerSignal()}`);
-  
+
   // 嵌套 Effect：会自动注册为外层 'outer' 订阅者的子节点
   effect(() => {
     console.log(`内层 Signal: ${innerSignal()}`);
@@ -219,7 +242,7 @@ const disposeOuter = effect(() => {
 innerSignal.set(200); // 输出: "内层 Signal: 200"
 
 // 销毁外层 Effect 订阅，挂载在其内部的内层 Effect 会被自动深度销毁
-disposeOuter(); 
+disposeOuter();
 
 innerSignal.set(300); // (没有任何输出，内层 Effect 已随外层一并自动销毁释放，无内存泄漏)
 ```

@@ -9,10 +9,9 @@ A lightweight, robust, high-performance, and type-safe Signals reactive engine b
 ---
 
 🌐 **Languages / 多语言**:
-* **[简体中文 (Simplified Chinese)](./README.zh-CN.md)**
-* **[日本語 (Japanese)](./README.ja.md)**
 
-📦 **NPM Package**: [https://www.npmjs.com/package/@lenic/signal](https://www.npmjs.com/package/@lenic/signal)
+- **[简体中文 (Simplified Chinese)](./README.zh-CN.md)**
+- **[日本語 (Japanese)](./README.ja.md)**
 
 ---
 
@@ -23,55 +22,71 @@ A lightweight, robust, high-performance, and type-safe Signals reactive engine b
 Unlike traditional reactive frameworks, `@lenic/signal` focuses on predictable sync scheduling and meticulous memory management. It is designed to be embedded in frontend frameworks, utility libraries, or pure vanilla JS applications.
 
 ### Key Architectural Highlights
-*   🚀 **Doubly Linked List Dependency Graph**: Utilizes custom doubly linked lists (`LinkedList` and `LinkedNode`) instead of standard arrays to store connections. Dynamic dependency changes and stale subscription cleanup operate in $O(1)$ time complexity, bypassing array reallocation and splice overhead.
-*   🔄 **Predictable Synchronous Batching**: Bundles multiple signal writes inside a `batch()` call, executing updates synchronously at the end of the batch block without waiting for an asynchronous microtask cycle.
-*   🧹 **Hierarchical Lifecycle Management (No Memory Leaks)**: Implements structured disposal. Subscriptions created within active scopes (such as nested effects or computed memos) are registered under their parent scope and are **automatically and recursively cleaned up** when the parent is disposed.
+
+- 🚀 **Doubly Linked List Dependency Graph**: Utilizes custom doubly linked lists (`LinkedList` and `LinkedNode`) instead of standard arrays to store connections. Dynamic dependency changes and stale subscription cleanup operate in $O(1)$ time complexity, bypassing array reallocation and splice overhead.
+- 🔄 **Predictable Synchronous Batching**: Bundles multiple signal writes inside a `batch()` call, executing updates synchronously at the end of the batch block without waiting for an asynchronous microtask cycle.
+- 🧹 **Hierarchical Lifecycle Management (No Memory Leaks)**: Implements structured disposal. Subscriptions created within active scopes (such as nested effects or computed memos) are registered under their parent scope and are **automatically and recursively cleaned up** when the parent is disposed.
 
 ---
 
 ## 📐 Architecture & Flow
 
 The reactive flow of `@lenic/signal` relies on four main abstractions:
+
 1.  **Observable**: Holds values/actions that can be tracked (e.g., `Signal` or `Memo`).
 2.  **Subscriber**: Executing environment for reactive logic (e.g., `Effect` or `Memo` runner).
 3.  **Connector (`IConnector`)**: A doubly-linked bridge establishing an $O(1)$ relationship between Observables and Subscribers.
 4.  **Scheduler**: Manages queue execution and enforces synchronous batching.
 
 ```mermaid
-flowchart TD
-    subgraph Reactive States "Reactive States (Observables)"
-        S[Writable Signal] -->|getter() / track| O[Observable]
-        M[Computed Memo] -->|getter() / track| O
-    end
+classDiagram
+    class IDisposable {
+        <<interface>>
+        +dispose() void
+        +disposeWithMe(disposable) void
+    }
 
-    subgraph Dependency Graph "Dependency Graph (Doubly Linked List)"
-        O <-->|subscribers list| SN[Linked Node]
-        SN <-->|connects to| SUB[Subscriber]
-        SUB <-->|dependencies list| CN[Connector Node]
-        CN <-->|connects to| O
-    end
+    class IObservable {
+        <<interface>>
+        +ILinkedList~ISubscriber~ subscribers
+        +track() void
+        +trigger() void
+    }
 
-    subgraph Side Effects "Side Effects & Logic (Subscribers)"
-        SUB -->|runAction()| E[Effect Function]
-        SUB -->|customAction()| M
-        
-        ParentSUB[Parent Subscriber] -->|owns / recursively disposes| ChildSUB[Child Subscriber]
-    end
+    class ISubscriber {
+        <<interface>>
+        +number version
+        +ILinkedList~ISubscriber~ children
+        +ILinkedList~IConnector~ dependencies
+        +ILinkedNode~IConnector~ currentConnector
+        +run(customAction) void
+        +scheduleUpdate() void
+    }
 
-    subgraph Scheduler Box "Execution Controller (Scheduler)"
-        SUB -->|scheduleUpdate()| DB[dirtySubscribers Queue]
-        DB -->|flush() / synchronously run| SUB
-        
-        B[batch(action)] -->|1. Run Action| Action
-        Action -->|Modify multiple signals| S
-        B -->|2. Finally block / Synchronously| DB
-    end
+    class IConnector {
+        <<interface>>
+        +number lastVersion
+        +IObservable observable
+        +ILinkedNode~ISubscriber~ subscriberNode
+    }
 
-    style S fill:#ff9f43,stroke:#333,stroke-width:2px,color:#fff
-    style M fill:#54a0ff,stroke:#333,stroke-width:2px,color:#fff
-    style O fill:#5f27cd,stroke:#333,stroke-width:2px,color:#fff
-    style SUB fill:#10ac84,stroke:#333,stroke-width:2px,color:#fff
-    style B fill:#ee5253,stroke:#333,stroke-width:2px,color:#fff
+    class IScheduler {
+        <<interface>>
+        +ETaskStatus taskStatus
+        +ISubscriber activeSubscriber
+        +ILinkedList~ISubscriber~ dirtySubscribers
+        +batch(action) void
+        +flush() void
+    }
+
+    IDisposable <|-- ISubscriber
+    ISubscriber *-- IConnector : dependencies
+    IConnector --> IObservable : observable
+    IObservable *-- ISubscriber : subscribers
+    IConnector --> ISubscriber : subscriberNode
+    ISubscriber *-- ISubscriber : children
+    IScheduler --> ISubscriber : activeSubscriber
+    IScheduler *-- ISubscriber : dirtySubscribers
 ```
 
 ---
@@ -96,9 +111,11 @@ yarn add @lenic/signal
 ## 🛠️ API Reference & Examples
 
 ### 1. `signal(initialValue)`
+
 Creates a writable signal that holds a value.
-*   **Read**: Call the function itself: `val()`
-*   **Write**: Use the `.set(value)` method: `val.set(newValue)`
+
+- **Read**: Call the function itself: `val()`
+- **Write**: Use the `.set(value)` method: `val.set(newValue)`
 
 ```typescript
 import { signal } from '@lenic/signal';
@@ -114,8 +131,10 @@ console.log(count()); // Output: 5
 ```
 
 ### 2. `effect(fn)`
+
 Creates a subscriber that immediately executes `fn`, automatically tracks accessed signals, and reruns whenever those signals change.
-*   **Returns**: A cleanup function `() => void` to dispose of the effect.
+
+- **Returns**: A cleanup function `() => void` to dispose of the effect.
 
 ```typescript
 import { signal, effect } from '@lenic/signal';
@@ -138,9 +157,11 @@ count.set(2); // (No output)
 ```
 
 ### 3. `memo(fn)`
+
 Creates a read-only computed signal that lazily evaluates and memoizes the result of the provided function.
-*   **Lazy & Cached**: Only recomputes if its dependencies have changed **and** the value is actually read.
-*   **Returns**: A readonly signal containing `.dispose()` and `.disposeWithMe(disposable)`.
+
+- **Lazy & Cached**: Only recomputes if its dependencies have changed **and** the value is actually read.
+- **Returns**: A readonly signal containing `.dispose()` and `.disposeWithMe(disposable)`.
 
 ```typescript
 import { signal, memo } from '@lenic/signal';
@@ -158,7 +179,7 @@ console.log(double()); // Output: "Calculating..." -> 20
 console.log(double()); // Output: 20
 
 // Modify dependency
-count.set(20); 
+count.set(20);
 
 // Value is dirty now, next read computes again
 console.log(double()); // Output: "Calculating..." -> 40
@@ -168,8 +189,10 @@ double.dispose();
 ```
 
 ### 4. `batch(action)`
+
 Combines multiple signal mutations inside one block, delaying the execution of subscriber side effects until the block completes.
-*   **Execution**: Purely synchronous. The `flush()` runs immediately after the action completes inside a `finally` block.
+
+- **Execution**: Purely synchronous. The `flush()` runs immediately after the action completes inside a `finally` block.
 
 ```typescript
 import { signal, effect, batch } from '@lenic/signal';
@@ -181,11 +204,11 @@ effect(() => {
   console.log(`Updated: ${name()} - ${count()}`);
 }); // Output: "Updated: A - 0"
 
-// Without batch, this would trigger the effect twice
+// Combine multiple updates using batch
 batch(() => {
   name.set('B'); // No effect execution yet
   count.set(100); // No effect execution yet
-}); 
+});
 
 // Output: "Updated: B - 100" (Executed once synchronously at the end of batch)
 ```
@@ -206,7 +229,7 @@ const innerSignal = signal(100);
 
 const disposeOuter = effect(() => {
   console.log(`Outer: ${outerSignal()}`);
-  
+
   // Nested effect: Automatically registered to parent 'outer' subscriber
   effect(() => {
     console.log(`Inner: ${innerSignal()}`);
@@ -219,7 +242,7 @@ const disposeOuter = effect(() => {
 innerSignal.set(200); // Output: "Inner: 200"
 
 // Disposing the outer effect will automatically tear down the nested inner effect
-disposeOuter(); 
+disposeOuter();
 
 innerSignal.set(300); // (No output, inner effect was automatically disposed)
 ```

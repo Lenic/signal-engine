@@ -9,10 +9,9 @@ TypeScriptで構築された、軽量・堅牢・超高性能かつ型安全な 
 ---
 
 🌐 **Languages / 多言語**:
-* **[English (英語)](./README.md)**
-* **[简体中文 (中国語)](./README.zh-CN.md)**
 
-📦 **NPM パッケージリンク**: [https://www.npmjs.com/package/@lenic/signal](https://www.npmjs.com/package/@lenic/signal)
+- **[English (英語)](./README.md)**
+- **[简体中文 (中国語)](./README.zh-CN.md)**
 
 ---
 
@@ -23,55 +22,71 @@ TypeScriptで構築された、軽量・堅牢・超高性能かつ型安全な 
 一般的な肥大化したリアクティブフレームワークとは異なり、`@lenic/signal` は**確定的な同期スケジューリング**と**厳密なメモリ管理**に焦点を当てています。フロントエンドフレームワークへの組み込み、ユーティリティライブラリ、またはピュアなバニラ JS/TS アプリケーションに最適です。
 
 ### 主要なアーキテクチャのハイライト
-*   🚀 **双方向連結リストによる依存関係グラフ (Doubly Linked List)**: サブスクライバーの管理に一般的な配列ではなく、カスタムの**双方向連結リスト**（`LinkedList` と `LinkedNode`）を採用しています。これにより、依存関係が動的に変更されたり、古いサブスクリプションを削除したりする操作が **$O(1)$ の時間複雑度**で実行され、配列の再メモリ割り当てや `splice` によるインデックス再計算のオーバーヘッドを完全に回避します。
-*   🔄 **予測可能な同期バッチング (Synchronous Batching)**: `batch()` 内での複数のシグナル書き込みをまとめ、非同期のマイクロタスク（Microtask）を待つことなく、バッチブロックの終了時に `try-finally` を通じて**即座に同期的に** `flush()` を実行します。これにより、極めて予測しやすい動的更新を実現し、非同期処理に伴うデバッグの難しさを解消します。
-*   🧹 **階層的な自動クリーンアップ管理 (メモリリークの防止)**: 堅牢なツリー型クリーンアップシステムを実装しています。アクティブなスコープ（ネストされた `effect` や計算値 `memo`）の内部で作成された子サブスクライバーは、親サブスクライバーの配下に自動的に登録されます。親が再実行されるか破棄（`dispose`）されると、すべての子サブスクリプションが**再帰的かつクリーンに自動破棄**され、メモリリークを根底から防止します。
+
+- 🚀 **双方向連結リストによる依存関係グラフ (Doubly Linked List)**: サブスクライバーの管理に一般的な配列ではなく、カスタムの**双方向連結リスト**（`LinkedList` と `LinkedNode`）を採用しています。これにより、依存関係が動的に変更されたり、古いサブスクリプションを削除したりする操作が **$O(1)$ の時間複雑度**で実行され、配列の再メモリ割り当てや `splice` によるインデックス再計算のオーバーヘッドを完全に回避します。
+- 🔄 **予測可能な同期バッチング (Synchronous Batching)**: `batch()` 内での複数のシグナル書き込みをまとめ、非同期のマイクロタスク（Microtask）を待つことなく、バッチブロックの終了時に `try-finally` を通じて**即座に同期的に** `flush()` を実行します。これにより、極めて予測しやすい動的更新を実現し、非同期処理に伴うデバッグの難しさを解消します。
+- 🧹 **階層的な自動クリーンアップ管理 (メモリリークの防止)**: 堅牢なツリー型クリーンアップシステムを実装しています。アクティブなスコープ（ネストされた `effect` や計算値 `memo`）の内部で作成された子サブスクライバーは、親サブスクライバーの配下に自動的に登録されます。親が再実行されるか破棄（`dispose`）されると、すべての子サブスクリプションが**再帰的かつクリーンに自動破棄**され、メモリリークを根底から防止します。
 
 ---
 
 ## 📐 アーキテクチャとフロー
 
 `@lenic/signal` のリアクティブフローは、主に次の4つの抽象化に依存しています：
+
 1.  **Observable（可観測源）**: 追跡可能な値やアクションを保持します（例: `Signal` または `Memo`）。
 2.  **Subscriber（購読者）**: リアクティブ論理の実行環境です（例: `Effect` の実行環境や `Memo` の評価器）。
 3.  **Connector（コネクター `IConnector`）**: 双方向連結リストブリッジであり、Observable と Subscriber の間に $O(1)$ の動的接続を確立します。
 4.  **Scheduler（スケジューラー）**: 同期バッチングと更新キューの実行を制御します。
 
 ```mermaid
-flowchart TD
-    subgraph Reactive States "リアクティブ状態源 (Observables)"
-        S[読み書き可能 Signal] -->|getter() / track| O[Observable]
-        M[計算プロパティ Memo] -->|getter() / track| O
-    end
+classDiagram
+    class IDisposable {
+        <<interface>>
+        +dispose() void
+        +disposeWithMe(disposable) void
+    }
 
-    subgraph Dependency Graph "双方向連結リスト依存グラフ"
-        O <-->|購読者リスト subscribers| SN[連結ノード SN]
-        SN <-->|接続| SUB[Subscriber 購読者]
-        SUB <-->|依存リスト dependencies| CN[コネクターノード CN]
-        CN <-->|接続| O
-    end
+    class IObservable {
+        <<interface>>
+        +ILinkedList~ISubscriber~ subscribers
+        +track() void
+        +trigger() void
+    }
 
-    subgraph Side Effects "副作用と論理環境 (Subscribers)"
-        SUB -->|runAction()| E[Effect 副作用関数]
-        SUB -->|customAction()| M
-        
-        ParentSUB[親購読者] -->|所有および再帰廃棄| ChildSUB[子購読者]
-    end
+    class ISubscriber {
+        <<interface>>
+        +number version
+        +ILinkedList~ISubscriber~ children
+        +ILinkedList~IConnector~ dependencies
+        +ILinkedNode~IConnector~ currentConnector
+        +run(customAction) void
+        +scheduleUpdate() void
+    }
 
-    subgraph Scheduler Box "実行コントローラー (Scheduler)"
-        SUB -->|scheduleUpdate()| DB[dirtySubscribers キュー]
-        DB -->|flush() / 同期実行| SUB
-        
-        B[batch 同期バッチ] -->|1. アクション実行| Action
-        Action -->|複数シグナル変更| S
-        B -->|2. Finally ブロック / 同時同期| DB
-    end
+    class IConnector {
+        <<interface>>
+        +number lastVersion
+        +IObservable observable
+        +ILinkedNode~ISubscriber~ subscriberNode
+    }
 
-    style S fill:#ff9f43,stroke:#333,stroke-width:2px,color:#fff
-    style M fill:#54a0ff,stroke:#333,stroke-width:2px,color:#fff
-    style O fill:#5f27cd,stroke:#333,stroke-width:2px,color:#fff
-    style SUB fill:#10ac84,stroke:#333,stroke-width:2px,color:#fff
-    style B fill:#ee5253,stroke:#333,stroke-width:2px,color:#fff
+    class IScheduler {
+        <<interface>>
+        +ETaskStatus taskStatus
+        +ISubscriber activeSubscriber
+        +ILinkedList~ISubscriber~ dirtySubscribers
+        +batch(action) void
+        +flush() void
+    }
+
+    IDisposable <|-- ISubscriber
+    ISubscriber *-- IConnector : dependencies
+    IConnector --> IObservable : observable
+    IObservable *-- ISubscriber : subscribers
+    IConnector --> ISubscriber : subscriberNode
+    ISubscriber *-- ISubscriber : children
+    IScheduler --> ISubscriber : activeSubscriber
+    IScheduler *-- ISubscriber : dirtySubscribers
 ```
 
 ---
@@ -96,9 +111,11 @@ yarn add @lenic/signal
 ## 🛠️ API リファレンスとコード例
 
 ### 1. `signal(initialValue)`
+
 値を保持する読み書き可能な Signal を作成します。
-*   **値の読み取り**: 作成した関数をそのまま呼び出します: `count()`
-*   **値の書き込み**: `.set(newValue)` メソッドを使用します: `count.set(newValue)`
+
+- **値の読み取り**: 作成した関数をそのまま呼び出します: `count()`
+- **値の書き込み**: `.set(newValue)` メソッドを使用します: `count.set(newValue)`
 
 ```typescript
 import { signal } from '@lenic/signal';
@@ -114,8 +131,10 @@ console.log(count()); // 出力: 5
 ```
 
 ### 2. `effect(fn)`
+
 サブスクライバーを作成し、即座に `fn` を実行して、アクセスされた Signal の依存関係を自動的に収集します。依存値が変更されるたびに、`fn` が自動的に再実行されます。
-*   **戻り値**: 副作用の購読を解除し、リソースをクリーンアップする関数 `() => void`。
+
+- **戻り値**: 副作用の購読を解除し、リソースをクリーンアップする関数 `() => void`。
 
 ```typescript
 import { signal, effect } from '@lenic/signal';
@@ -138,9 +157,11 @@ count.set(2); // (何も出力されません)
 ```
 
 ### 3. `memo(fn)`
+
 遅延評価 (Lazy Evaluation) と結果のキャッシュ (Memoization) を行う読み取り専用の計算 Signal を作成します。
-*   **遅延評価とキャッシュ**: 依存関係が変更され、**かつ**値が実際に読み取られたときにのみ再計算されます。
-*   **戻り値**: `.dispose()` と `.disposeWithMe(disposable)` を含む読み取り専用の計算 Signal。
+
+- **遅延評価とキャッシュ**: 依存関係が変更され、**かつ**値が実際に読み取られたときにのみ再計算されます。
+- **戻り値**: `.dispose()` と `.disposeWithMe(disposable)` を含む読み取り専用の計算 Signal。
 
 ```typescript
 import { signal, memo } from '@lenic/signal';
@@ -158,7 +179,7 @@ console.log(double()); // 出力: "計算中..." -> 20
 console.log(double()); // 出力: 20
 
 // 依存シグナルの変更
-count.set(20); 
+count.set(20);
 
 // 値が dirty（ダーティ）としてマークされ、次の読み取り時に再計算されます
 console.log(double()); // 出力: "計算中..." -> 40
@@ -168,8 +189,10 @@ double.dispose();
 ```
 
 ### 4. `batch(action)`
+
 複数の Signal 変更アクションを1つのブロック内にまとめ、ブロックの完了後に副作用を同期的に1回だけトリガーすることで、重複計算を防ぎます。
-*   **実行メカニズム**: 純粋な同期処理。`batch` 内のアクションが完了した直後、`finally` ブロックで同期的に `flush()` が呼び出されます。
+
+- **実行メカニズム**: 純粋な同期処理。`batch` 内のアクションが完了した直後、`finally` ブロックで同期的に `flush()` が呼び出されます。
 
 ```typescript
 import { signal, effect, batch } from '@lenic/signal';
@@ -181,11 +204,11 @@ effect(() => {
   console.log(`更新: ${name()} - ${count()}`);
 }); // 出力: "更新: A - 0"
 
-// バッチを使用しない場合、このブロック内で副作用が2回呼び出されます
+// batch を使用して複数の更新を統合
 batch(() => {
   name.set('B'); // まだエフェクトは実行されません
   count.set(100); // まだエフェクトは実行されません
-}); 
+});
 
 // 出力: "更新: B - 100" (バッチ終了時に同期的に1回だけ実行されます)
 ```
@@ -206,7 +229,7 @@ const innerSignal = signal(100);
 
 const disposeOuter = effect(() => {
   console.log(`親 Signal: ${outerSignal()}`);
-  
+
   // ネストされた Effect: 自動的に親 'outer' 購読者の子として登録されます
   effect(() => {
     console.log(`子 Signal: ${innerSignal()}`);
@@ -219,7 +242,7 @@ const disposeOuter = effect(() => {
 innerSignal.set(200); // 出力: "子 Signal: 200"
 
 // 親のエフェクトを破棄すると、内部の子エフェクトも自動的にクリーンアップされます
-disposeOuter(); 
+disposeOuter();
 
 innerSignal.set(300); // (出力なし。子エフェクトは親とともに安全に破棄され、メモリリークはありません)
 ```
