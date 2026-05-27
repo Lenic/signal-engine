@@ -13,3 +13,11 @@ export * from './utils';
 export function batch(action: () => void): void {
   scheduler.batch(action);
 }
+
+/**
+ * Sets the global deep comparator.
+ * @param comparator The comparator function.
+ */
+export function setGlobalDeepComparator(comparator: (a: unknown, b: unknown) => boolean): void {
+  scheduler.deepComparator = comparator;
+}
