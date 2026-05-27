@@ -41,6 +41,11 @@ export interface ISubscriber extends IDisposable {
  * Represents an entity that can be observed and notifies its subscribers when it changes.
  */
 export interface IObservable {
+  /**
+   * Indicates whether the observable is currently in the queue to be processed.
+   * This is used to prevent the observable from being added to the queue multiple times.
+   */
+  isInQueue: boolean;
   /** The list of subscribers currently observing this observable. */
   subscribers: ILinkedList<ISubscriber>;
 
@@ -62,13 +67,23 @@ export const ETaskStatus = {
 } as const;
 export type ETaskStatus = (typeof ETaskStatus)[keyof typeof ETaskStatus];
 
+export interface IPendingObservable {
+  observable: IObservable;
+  originalValue: unknown;
+  comparator(a: unknown, b: unknown): boolean;
+  valueOf(): unknown;
+}
+
 export interface IScheduler {
+  deepComparator: null | ((a: unknown, b: unknown) => boolean);
   /** The status of the scheduler. */
   taskStatus: ETaskStatus;
   /** The currently active subscriber being processed. */
   activeSubscriber: ISubscriber | null;
   /** The list of subscribers that are queued to be processed. */
   dirtySubscribers: ILinkedList<ISubscriber>;
+  /** The list of observables that are queued to be processed. */
+  dirtyObservables: ILinkedList<IPendingObservable>;
 
   /**
    * Runs a task in the scheduler's context.
@@ -78,7 +93,11 @@ export interface IScheduler {
   /**
    * Flushes the dirty subscribers.
    */
-  flush(): void;
+  flushSubscribers(): void;
+  /**
+   * Flushes the dirty observables.
+   */
+  flushObservables(): void;
 }
 
 /**
@@ -92,6 +111,20 @@ export interface IReadonlySignalValue<T> {
 }
 
 /**
+ * Options for creating or updating a signal value.
+ */
+export interface ISignalValueOptions {
+  /**
+   * The comparator function to use for comparing values.
+   *
+   * - `'deep'`: Deep comparison by the global default comparator.
+   * - `'shallow'`: Shallow comparison by `===`.
+   * - `(a: T, b: T) => boolean`: Custom comparator.
+   */
+  comparator?: 'deep' | 'shallow' | ((a: unknown, b: unknown) => boolean);
+}
+
+/**
  * Represents a writable signal value that can be read and updated.
  */
 export interface ISignalValue<T> extends IReadonlySignalValue<T> {
@@ -99,5 +132,5 @@ export interface ISignalValue<T> extends IReadonlySignalValue<T> {
    * Sets a new value for the signal.
    * @param value The new value to set.
    */
-  set(value: T): void;
+  set(value: T, options?: ISignalValueOptions): void;
 }

@@ -74,7 +74,7 @@ describe('batch', () => {
     });
 
     // Since the end value is same as start value, it should NOT trigger updates
-    expect(runCount).toBe(2);
+    expect(runCount).toBe(1);
   });
 
   test('disposing an effect inside batch prevents execution', () => {

@@ -3,9 +3,11 @@ import { IConnector, IObservable, ISubscriber } from './types';
 import { scheduler } from './scheduler';
 
 export class Observable implements IObservable {
+  isInQueue: boolean;
   subscribers: ILinkedList<ISubscriber>;
 
   constructor() {
+    this.isInQueue = false;
     this.subscribers = new LinkedList<ISubscriber>();
   }
 

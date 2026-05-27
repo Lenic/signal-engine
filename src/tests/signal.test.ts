@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { signal } from '../signal';
 import { effect } from '../effect';
-import { memo } from '../memo';
 
 describe('signal', () => {
   test('basic read and write', () => {
