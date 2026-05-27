@@ -15,14 +15,14 @@ describe('setGlobalDeepComparator', () => {
 
     expect(runCount).toBe(1);
 
-    obj.set({ count: 1 });
+    obj({ count: 1 });
     expect(runCount).toBe(1);
 
-    obj.set({ count: 2 });
+    obj({ count: 2 });
     expect(runCount).toBe(2);
 
     dispose();
-    obj.set({ count: 3 });
+    obj({ count: 3 });
     expect(runCount).toBe(2);
   });
 });

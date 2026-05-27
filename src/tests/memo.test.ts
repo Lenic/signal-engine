@@ -20,7 +20,7 @@ describe('memo', () => {
     expect(m()).toBe(3);
     expect(runCount).toBe(1);
 
-    a.set(3);
+    a(3);
     expect(m()).toBe(5);
     expect(runCount).toBe(2);
   });
@@ -44,7 +44,7 @@ describe('memo', () => {
     expect(runCount).toBe(1);
 
     // Update dependency but don't read - should not compute
-    a.set(2);
+    a(2);
     expect(runCount).toBe(1);
 
     // Read after update - should recompute once
@@ -78,7 +78,7 @@ describe('memo', () => {
     expect(bRunCount).toBe(1);
     expect(cRunCount).toBe(1);
 
-    a.set(3);
+    a(3);
     // Values changed but not read
     expect(bRunCount).toBe(1);
     expect(cRunCount).toBe(1);
@@ -124,7 +124,7 @@ describe('memo', () => {
 
     // Update A to 2:
     // a = 2 -> b = 12, c = 200 -> b+c = 212
-    a.set(2);
+    a(2);
 
     // Verify glitch-free: effect E must only run ONCE with the fully settled states of B and C.
     // There shouldn't be any intermediate/half-updated values like 12 + 100 (112) or 11 + 200 (211).
@@ -149,23 +149,23 @@ describe('memo', () => {
     expect(runCount).toBe(1);
 
     // Modify inactive dependency 'b'
-    b.set(100);
+    b(100);
     // Since 'b' is not tracked, it shouldn't dirty the memo or trigger updates
     expect(m()).toBe(1);
     expect(runCount).toBe(1);
 
     // Toggle flag to false
-    flag.set(false);
+    flag(false);
     expect(m()).toBe(100);
     expect(runCount).toBe(2);
 
     // Now 'a' is inactive, modify it
-    a.set(99);
+    a(99);
     expect(m()).toBe(100);
     expect(runCount).toBe(2);
 
     // Modify active 'b'
-    b.set(200);
+    b(200);
     expect(m()).toBe(200);
     expect(runCount).toBe(3);
   });
@@ -183,7 +183,7 @@ describe('memo', () => {
 
     m.dispose();
 
-    a.set(2);
+    a(2);
     // After disposal, dependency link is severed, it should just return the last cached value
     expect(m()).toBe(2);
     expect(runCount).toBe(1);
@@ -201,11 +201,11 @@ describe('memo', () => {
     expect(m()).toBe(2);
 
     // Setting to invalid value causes evaluation failure
-    a.set(2);
+    a(2);
     expect(() => m()).toThrow('Memo execution failed');
 
     // Setting back to valid value allows recovery
-    a.set(3);
+    a(3);
     expect(m()).toBe(6);
   });
 });

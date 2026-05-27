@@ -20,9 +20,9 @@ describe('batch', () => {
     expect(list).toEqual([3]);
 
     scheduler.batch(() => {
-      a.set(2);
-      a.set(3);
-      b.set(4);
+      a(2);
+      a(3);
+      b(4);
     });
 
     // Should only trigger once at the end of the batch with final values
@@ -45,12 +45,12 @@ describe('batch', () => {
 
     scheduler.batch(() => {
       scheduler.batch(() => {
-        a.set(10);
-        b.set(20);
+        a(10);
+        b(20);
       });
       // Outer batch not finished yet, shouldn't run
       expect(runCount).toBe(1);
-      a.set(100);
+      a(100);
     });
 
     expect(runCount).toBe(2);
@@ -69,8 +69,8 @@ describe('batch', () => {
     expect(runCount).toBe(1);
 
     scheduler.batch(() => {
-      a.set(2);
-      a.set(1); // Set back to original value before batch ends
+      a(2);
+      a(1); // Set back to original value before batch ends
     });
 
     // Since the end value is same as start value, it should NOT trigger updates
@@ -89,7 +89,7 @@ describe('batch', () => {
     expect(runCount).toBe(1);
 
     scheduler.batch(() => {
-      a.set(2);
+      a(2);
       dispose(); // Dispose before batch flushes
     });
 
@@ -116,8 +116,8 @@ describe('batch', () => {
 
     expect(() => {
       scheduler.batch(() => {
-        b.set(20);
-        a.set(2); // Causes crash during flush
+        b(20);
+        a(2); // Causes crash during flush
       });
     }).toThrow('Batch effect crash');
 
@@ -125,7 +125,7 @@ describe('batch', () => {
     expect(normalEffectRun).toBe(2);
 
     // Verify scheduler works for future updates
-    b.set(30);
+    b(30);
     expect(normalEffectRun).toBe(3);
   });
 });

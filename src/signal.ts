@@ -25,23 +25,25 @@ export function signal<T>(initialValue: T, options?: ISignalValueOptions): ISign
     comparator = defaultComparator;
   }
 
-  function getter(): T {
-    observable.track();
-    return value;
-  }
-
-  getter.set = (nextValue: T) => {
-    if (!comparator(value, nextValue)) {
-      let originalValue = value;
+  const fn = comparator;
+  function getter(...args: any[]): any {
+    // No arguments: act as getter
+    if (args.length === 0) {
+      observable.track();
+      return value;
+    }
+    // Arguments provided: act as setter
+    const [nextValue] = args as [T];
+    if (!fn(value, nextValue)) {
+      const originalValue = value;
       value = nextValue;
       if (scheduler.taskStatus === ETaskStatus.IDLE) {
         observable.trigger();
       } else if (!observable.isInQueue) {
-        scheduler.dirtyObservables.add({ observable, originalValue, comparator, valueOf: () => value });
+        scheduler.dirtyObservables.add({ observable, originalValue, comparator: fn, valueOf: () => value });
         observable.isInQueue = true;
       }
     }
-  };
-
-  return getter;
+  }
+  return getter as ISignalValue<T>;
 }

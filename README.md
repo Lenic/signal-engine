@@ -115,7 +115,7 @@ yarn add @lenic/signal
 Creates a writable signal that holds a value.
 
 - **Read**: Call the function itself: `val()`
-- **Write**: Use the `.set(value)` method: `val.set(newValue)`
+- **Write**: Use the `(newValue)` method: `val(newValue)`
 
 ```typescript
 import { signal } from '@lenic/signal';
@@ -126,7 +126,7 @@ const count = signal(0);
 console.log(count()); // Output: 0
 
 // Modifying the signal
-count.set(5);
+count(5);
 console.log(count()); // Output: 5
 ```
 
@@ -147,13 +147,13 @@ const dispose = effect(() => {
   console.log(`${name()} has count: ${count()}`);
 });
 
-count.set(1); // Output: "Antigravity has count: 1"
-name.set('DeepMind'); // Output: "DeepMind has count: 1"
+count(1); // Output: "Antigravity has count: 1"
+name('DeepMind'); // Output: "DeepMind has count: 1"
 
 // Stop tracking changes
 dispose();
 
-count.set(2); // (No output)
+count(2); // (No output)
 ```
 
 ### 3. `memo(fn)`
@@ -179,7 +179,7 @@ console.log(double()); // Output: "Calculating..." -> 20
 console.log(double()); // Output: 20
 
 // Modify dependency
-count.set(20);
+count(20);
 
 // Value is dirty now, next read computes again
 console.log(double()); // Output: "Calculating..." -> 40
@@ -206,8 +206,8 @@ effect(() => {
 
 // Combine multiple updates using batch
 batch(() => {
-  name.set('B'); // No effect execution yet
-  count.set(100); // No effect execution yet
+  name('B'); // No effect execution yet
+  count(100); // No effect execution yet
 });
 
 // Output: "Updated: B - 100" (Executed once synchronously at the end of batch)
@@ -231,8 +231,8 @@ setGlobalDeepComparator(deepEqual);
 // Signal using deep comparison
 const obj = signal({ count: 1 }, { comparator: 'deep' });
 
-obj.set({ count: 1 }); // No subscriber notification because values are deep equal
-obj.set({ count: 2 }); // Triggers subscribers as values differ
+obj({ count: 1 }); // No subscriber notification because values are deep equal
+obj({ count: 2 }); // Triggers subscribers as values differ
 ```
 
 > **Note**: The comparator should be a pure function returning a boolean indicating deep equality.
@@ -263,12 +263,12 @@ const disposeOuter = effect(() => {
 // "Outer: 0"
 // "Inner: 100"
 
-innerSignal.set(200); // Output: "Inner: 200"
+innerSignal(200); // Output: "Inner: 200"
 
 // Disposing the outer effect will automatically tear down the nested inner effect
 disposeOuter();
 
-innerSignal.set(300); // (No output, inner effect was automatically disposed)
+innerSignal(300); // (No output, inner effect was automatically disposed)
 ```
 
 ---

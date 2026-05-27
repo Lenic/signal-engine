@@ -7,10 +7,10 @@ describe('signal', () => {
     const s = signal(1);
     expect(s()).toBe(1);
 
-    s.set(2);
+    s(2);
     expect(s()).toBe(2);
 
-    s.set(3);
+    s(3);
     expect(s()).toBe(3);
   });
 
@@ -26,7 +26,7 @@ describe('signal', () => {
     expect(runCount).toBe(1);
 
     // Set same value
-    count.set(1);
+    count(1);
     expect(runCount).toBe(1);
   });
 
@@ -44,13 +44,13 @@ describe('signal', () => {
 
     // 1. Mutate internal property, keep same reference
     initialObj.value = 2;
-    s.set(initialObj);
+    s(initialObj);
     // Reference check (value !== nextValue) means this shouldn't trigger update
     expect(runCount).toBe(1);
     expect(s().value).toBe(2);
 
     // 2. Set new object reference
-    s.set({ value: 3 });
+    s({ value: 3 });
     expect(runCount).toBe(2);
     expect(s().value).toBe(3);
   });
@@ -73,7 +73,7 @@ describe('signal', () => {
     expect(runCount1).toBe(1);
     expect(runCount2).toBe(1);
 
-    s.set('world');
+    s('world');
     expect(runCount1).toBe(2);
     expect(runCount2).toBe(2);
   });
@@ -84,7 +84,7 @@ describe('signal', () => {
 
     try {
       effect(() => {
-        count.set(count() + 1);
+        count(count() + 1);
       });
     } catch (e) {
       caught = true;

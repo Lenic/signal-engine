@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { signal } from '../signal';
 import { effect } from '../effect';
-import { scheduler } from '../core';
 
 describe('effect', () => {
   test('basic reactivity', () => {
@@ -14,10 +13,10 @@ describe('effect', () => {
 
     expect(list).toEqual([1]);
 
-    s.set(2);
+    s(2);
     expect(list).toEqual([1, 2]);
 
-    s.set(3);
+    s(3);
     expect(list).toEqual([1, 2, 3]);
   });
 
@@ -33,7 +32,7 @@ describe('effect', () => {
 
     dispose();
 
-    s.set(2);
+    s(2);
     expect(list).toEqual([1]);
   });
 
@@ -57,27 +56,27 @@ describe('effect', () => {
     expect(list).toEqual([1]);
 
     // Update active dependency 'a'
-    a.set(2);
+    a(2);
     expect(runCount).toBe(2);
     expect(list).toEqual([1, 2]);
 
     // Update inactive dependency 'b' - should not trigger
-    b.set(20);
+    b(20);
     expect(runCount).toBe(2);
     expect(list).toEqual([1, 2]);
 
     // Switch branch to false, which relies on 'b'
-    flag.set(false);
+    flag(false);
     expect(runCount).toBe(3);
     expect(list).toEqual([1, 2, 20]);
 
     // Now 'a' is inactive, updating it should not trigger
-    a.set(999);
+    a(999);
     expect(runCount).toBe(3);
     expect(list).toEqual([1, 2, 20]);
 
     // Update newly active 'b' - should trigger
-    b.set(30);
+    b(30);
     expect(runCount).toBe(4);
     expect(list).toEqual([1, 2, 20, 30]);
   });
@@ -104,7 +103,7 @@ describe('effect', () => {
 
     // Trigger parent re-run.
     // The previous child effect should be auto-disposed when the parent re-runs.
-    a.set(2);
+    a(2);
     expect(parentRunCount).toBe(2);
     // Since parent re-ran, it created a new child effect.
     // The old child effect is disposed (so it won't run). The new child runs.
@@ -113,7 +112,7 @@ describe('effect', () => {
 
     // Now if we dispose the parent, all nested child effects should also be disposed.
     disposeParent();
-    a.set(3);
+    a(3);
     expect(parentRunCount).toBe(2);
     expect(childRunCount).toBe(2);
     expect(list).toEqual([1, 2]);
@@ -144,13 +143,13 @@ describe('effect', () => {
 
     // Trigger update that causes an error
     expect(() => {
-      a.set(2);
+      a(2);
     }).toThrow('Effect crash');
 
     expect(hasThrown).toBe(true);
 
     // Trigger normal effect update - it should still execute correctly since scheduler should recover
-    b.set(20);
+    b(20);
     expect(normalEffectRunCount).toBe(2);
   });
 
@@ -168,11 +167,11 @@ describe('effect', () => {
 
     expect(runCount).toBe(1);
 
-    s.set(2);
+    s(2);
     expect(runCount).toBe(2);
 
     // Should be disposed now, subsequent writes shouldn't trigger
-    s.set(3);
+    s(3);
     expect(runCount).toBe(2);
   });
 });

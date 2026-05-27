@@ -115,7 +115,7 @@ yarn add @lenic/signal
 创建一个持值的可读写 Signal。
 
 - **读取值**：直接调用函数本身：`count()`。
-- **更新值**：调用其 `.set(value)` 方法：`count.set(newValue)`。
+- **更新值**：调用其 `(newValue)` 方法：`count(newValue)`。
 
 ```typescript
 import { signal } from '@lenic/signal';
@@ -126,7 +126,7 @@ const count = signal(0);
 console.log(count()); // 输出: 0
 
 // 更新信号值
-count.set(5);
+count(5);
 console.log(count()); // 输出: 5
 ```
 
@@ -147,13 +147,13 @@ const dispose = effect(() => {
   console.log(`${name()} 的计数是: ${count()}`);
 });
 
-count.set(1); // 输出: "张三 的计数是: 1"
-name.set('李四'); // 输出: "李四 的计数是: 1"
+count(1); // 输出: "张三 的计数是: 1"
+name('李四'); // 输出: "李四 的计数是: 1"
 
 // 停止依赖追踪和自动响应
 dispose();
 
-count.set(2); // (无任何输出)
+count(2); // (无任何输出)
 ```
 
 ### 3. `memo(fn)`
@@ -179,7 +179,7 @@ console.log(double()); // 输出: "计算中..." -> 20
 console.log(double()); // 输出: 20
 
 // 改变依赖项
-count.set(20);
+count(20);
 
 // 值被标记为 dirty（脏），下次读取时会重新计算
 console.log(double()); // 输出: "计算中..." -> 40
@@ -206,8 +206,8 @@ effect(() => {
 
 // 使用 batch 合并多次更新
 batch(() => {
-  name.set('B'); // 暂不触发 effect
-  count.set(100); // 暂不触发 effect
+  name('B'); // 暂不触发 effect
+  count(100); // 暂不触发 effect
 });
 
 // 输出: "更新结果: B - 100" (在 batch 结束时，仅同步执行了一次)
@@ -233,8 +233,8 @@ setGlobalDeepComparator(deepEqual);
 // 使用深比较的 Signal
 const obj = signal({ count: 1 }, { comparator: 'deep' });
 
-obj.set({ count: 1 }); // 深度相等，不触发订阅者
-obj.set({ count: 2 }); // 值不同，触发订阅者
+obj({ count: 1 }); // 深度相等，不触发订阅者
+obj({ count: 2 }); // 值不同，触发订阅者
 ```
 
 > **注意**：比较函数必须是纯函数，返回表示深度相等的布尔值。
@@ -265,12 +265,12 @@ const disposeOuter = effect(() => {
 // "外层 Signal: 0"
 // "内层 Signal: 100"
 
-innerSignal.set(200); // 输出: "内层 Signal: 200"
+innerSignal(200); // 输出: "内层 Signal: 200"
 
 // 销毁外层 Effect 订阅，挂载在其内部的内层 Effect 会被自动深度销毁
 disposeOuter();
 
-innerSignal.set(300); // (没有任何输出，内层 Effect 已随外层一并自动销毁释放，无内存泄漏)
+innerSignal(300); // (没有任何输出，内层 Effect 已随外层一并自动销毁释放，无内存泄漏)
 ```
 
 ---

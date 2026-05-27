@@ -132,5 +132,5 @@ export interface ISignalValue<T> extends IReadonlySignalValue<T> {
    * Sets a new value for the signal.
    * @param value The new value to set.
    */
-  set(value: T, options?: ISignalValueOptions): void;
+  (value: T, options?: ISignalValueOptions): void;
 }

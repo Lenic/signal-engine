@@ -115,7 +115,7 @@ yarn add @lenic/signal
 値を保持する読み書き可能な Signal を作成します。
 
 - **値の読み取り**: 作成した関数をそのまま呼び出します: `count()`
-- **値の書き込み**: `.set(newValue)` メソッドを使用します: `count.set(newValue)`
+- **値の書き込み**: `(newValue)` メソッドを使用します: `count(newValue)`
 
 ```typescript
 import { signal } from '@lenic/signal';
@@ -126,7 +126,7 @@ const count = signal(0);
 console.log(count()); // 出力: 0
 
 // 値の書き込み
-count.set(5);
+count(5);
 console.log(count()); // 出力: 5
 ```
 
@@ -147,13 +147,13 @@ const dispose = effect(() => {
   console.log(`${name()} のカウントは: ${count()}`);
 });
 
-count.set(1); // 出力: "山田 のカウントは: 1"
-name.set('佐藤'); // 出力: "佐藤 のカウントは: 1"
+count(1); // 出力: "山田 のカウントは: 1"
+name('佐藤'); // 出力: "佐藤 のカウントは: 1"
 
 // 変更の追跡と自動反応を停止します
 dispose();
 
-count.set(2); // (何も出力されません)
+count(2); // (何も出力されません)
 ```
 
 ### 3. `memo(fn)`
@@ -179,7 +179,7 @@ console.log(double()); // 出力: "計算中..." -> 20
 console.log(double()); // 出力: 20
 
 // 依存シグナルの変更
-count.set(20);
+count(20);
 
 // 値が dirty（ダーティ）としてマークされ、次の読み取り時に再計算されます
 console.log(double()); // 出力: "計算中..." -> 40
@@ -206,8 +206,8 @@ effect(() => {
 
 // batch を使用して複数の更新を統合
 batch(() => {
-  name.set('B'); // まだエフェクトは実行されません
-  count.set(100); // まだエフェクトは実行されません
+  name('B'); // まだエフェクトは実行されません
+  count(100); // まだエフェクトは実行されません
 });
 
 // 出力: "更新: B - 100" (バッチ終了時に同期的に1回だけ実行されます)
@@ -231,8 +231,8 @@ setGlobalDeepComparator(deepEqual);
 // deep 比較を使用するシグナル
 const obj = signal({ count: 1 }, { comparator: 'deep' });
 
-obj.set({ count: 1 }); // 深い等価なので購読者は通知されない
-obj.set({ count: 2 }); // 値が異なるので購読者がトリガーされる
+obj({ count: 1 }); // 深い等価なので購読者は通知されない
+obj({ count: 2 }); // 値が異なるので購読者がトリガーされる
 ```
 
 > **注意**: comparator は純粋関数で、ブール値を返す深い等価判定を行う必要があります。
@@ -261,12 +261,12 @@ const disposeOuter = effect(() => {
 // "親 Signal: 0"
 // "子 Signal: 100"
 
-innerSignal.set(200); // 出力: "子 Signal: 200"
+innerSignal(200); // 出力: "子 Signal: 200"
 
 // 親のエフェクトを破棄すると、内部の子エフェクトも自動的にクリーンアップされます
 disposeOuter();
 
-innerSignal.set(300); // (出力なし。子エフェクトは親とともに安全に破棄され、メモリリークはありません)
+innerSignal(300); // (出力なし。子エフェクトは親とともに安全に破棄され、メモリリークはありません)
 ```
 
 ---
