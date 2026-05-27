@@ -1,15 +1,28 @@
 {
   "name": "@lenic/signal",
+  "author": "lenic",
+  "license": "MIT",
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.1.6",
   "description": "Implement signal by typescript",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": "./dist/index.mjs",
     "./package.json": "./package.json"
   },
   "files": [
-    "dist",
-    "package.json"
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lenic/signal-engine.git"
+  },
+  "keywords": [
+    "signal",
+    "engine"
   ],
   "scripts": {
     "build": "tsdown",
