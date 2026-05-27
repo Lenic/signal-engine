@@ -77,7 +77,7 @@ export interface IPendingObservable {
 export interface IScheduler {
   deepComparator: null | ((a: unknown, b: unknown) => boolean);
   /** The status of the scheduler. */
-  taskStatus: ETaskStatus;
+  status: ETaskStatus;
   /** The currently active subscriber being processed. */
   activeSubscriber: ISubscriber | null;
   /** The list of subscribers that are queued to be processed. */

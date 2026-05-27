@@ -37,7 +37,7 @@ export function signal<T>(initialValue: T, options?: ISignalValueOptions): ISign
     if (!fn(value, nextValue)) {
       const originalValue = value;
       value = nextValue;
-      if (scheduler.taskStatus === ETaskStatus.IDLE) {
+      if (scheduler.status === ETaskStatus.IDLE) {
         observable.trigger();
       } else if (!observable.isInQueue) {
         scheduler.dirtyObservables.add({ observable, originalValue, comparator: fn, valueOf: () => value });

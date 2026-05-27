@@ -4,93 +4,88 @@ import { ETaskStatus, type IScheduler, type ISubscriber, type IPendingObservable
 export const scheduler: IScheduler = {
   deepComparator: null,
   activeSubscriber: null,
-  taskStatus: ETaskStatus.IDLE,
+  status: ETaskStatus.IDLE,
   dirtySubscribers: new LinkedList<ISubscriber>(),
   dirtyObservables: new LinkedList<IPendingObservable>(),
 
   batch(action: () => void): void {
-    const prev = this.taskStatus;
-    this.taskStatus = ETaskStatus.RUNNING;
+    const prev = this.status;
+    this.status = ETaskStatus.RUNNING;
     try {
       action();
     } finally {
-      this.taskStatus = prev;
+      this.status = prev;
       this.flushObservables();
       this.flushSubscribers();
     }
   },
 
   flushSubscribers(): void {
-    const caughtErrors: any[] = [];
-    while (true) {
-      if (this.taskStatus !== ETaskStatus.IDLE) return;
-
-      this.taskStatus = ETaskStatus.RUNNING;
-      try {
-        let node = this.dirtySubscribers.head;
-        if (!node) break;
-
-        while (node) {
-          try {
-            node.value.run();
-          } catch (e) {
-            caughtErrors.push(e);
-          }
-
-          const next = node.next;
-          node.removeSelf();
-          node = next;
-        }
-      } finally {
-        this.taskStatus = ETaskStatus.IDLE;
-      }
-    }
-
-    if (caughtErrors.length) {
-      if (caughtErrors.length === 1) {
-        throw caughtErrors[0];
-      } else {
-        throw new AggregateError(caughtErrors, 'Multiple errors occurred during effect execution');
-      }
-    }
+    flush(this, 'dirtySubscribers', (value) => value.run());
   },
 
   flushObservables() {
-    const caughtErrors: any[] = [];
-    while (true) {
-      if (this.taskStatus !== ETaskStatus.IDLE) return;
-
-      this.taskStatus = ETaskStatus.UPDATING;
-      try {
-        let node = this.dirtyObservables.head;
-        if (!node) break;
-
-        while (node) {
-          try {
-            if (!node.value.comparator(node.value.originalValue, node.value.valueOf())) {
-              node.value.observable.trigger();
-            }
-          } catch (e) {
-            caughtErrors.push(e);
-          } finally {
-            node.value.observable.isInQueue = false;
-          }
-
-          const next = node.next;
-          node.removeSelf();
-          node = next;
+    flush(
+      this,
+      'dirtyObservables',
+      (value) => {
+        if (!value.comparator(value.originalValue, value.valueOf())) {
+          value.observable.trigger();
         }
-      } finally {
-        this.taskStatus = ETaskStatus.IDLE;
-      }
-    }
-
-    if (caughtErrors.length) {
-      if (caughtErrors.length === 1) {
-        throw caughtErrors[0];
-      } else {
-        throw new AggregateError(caughtErrors, 'Multiple errors occurred during trigger execution');
-      }
-    }
+      },
+      (value) => void (value.observable.isInQueue = false),
+    );
   },
 };
+
+function flush(
+  scheduler: IScheduler,
+  listKey: 'dirtyObservables',
+  action: (node: IPendingObservable) => void,
+  finallyFn?: (node: IPendingObservable) => void,
+): void;
+function flush(
+  scheduler: IScheduler,
+  listKey: 'dirtySubscribers',
+  action: (node: ISubscriber) => void,
+  finallyFn?: (node: ISubscriber) => void,
+): void;
+function flush(scheduler: IScheduler, listKey: string, action: (node: any) => void, finallyFn?: (node: any) => void) {
+  const caughtErrors: any[] = [];
+  while (true) {
+    if (scheduler.status !== ETaskStatus.IDLE) return;
+
+    scheduler.status = listKey === 'dirtyObservables' ? ETaskStatus.UPDATING : ETaskStatus.RUNNING;
+    try {
+      let node = scheduler[listKey].head;
+      if (!node) break;
+
+      while (node) {
+        try {
+          action(node.value);
+        } catch (e) {
+          caughtErrors.push(e);
+        } finally {
+          finallyFn?.(node.value);
+        }
+
+        const next = node.next;
+        node.removeSelf();
+        node = next;
+      }
+    } finally {
+      scheduler.status = ETaskStatus.IDLE;
+    }
+  }
+
+  if (caughtErrors.length) {
+    if (caughtErrors.length === 1) {
+      throw caughtErrors[0];
+    } else {
+      throw new AggregateError(
+        caughtErrors,
+        `Multiple errors occurred during ${listKey === 'dirtyObservables' ? 'trigger' : 'effect'} execution`,
+      );
+    }
+  }
+}
