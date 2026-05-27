@@ -215,6 +215,32 @@ batch(() => {
 
 ---
 
+### 5. `setGlobalDeepComparator(comparator)`
+
+### 5. `setGlobalDeepComparator(comparator)`
+
+`comparator: 'deep'` 选项时使用的全局深比较函数。
+
+```typescript
+import { setGlobalDeepComparator, signal } from '@lenic/signal';
+
+// 定义深比较函数（简单的 JSON 字符串比较）
+const deepEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+// 注册全局深比较函数
+setGlobalDeepComparator(deepEqual);
+
+// 使用深比较的 Signal
+const obj = signal({ count: 1 }, { comparator: 'deep' });
+
+obj.set({ count: 1 }); // 深度相等，不触发订阅者
+obj.set({ count: 2 }); // 值不同，触发订阅者
+```
+
+> **注意**：比较函数必须是纯函数，返回表示深度相等的布尔值。
+
+---
+
 ## 🧹 苛刻的内存管理与父子级自动销毁
 
 `@lenic/signal` 内置了健壮的树状作用域销毁设计，使得嵌套的响应式结构开发变得极其安全和省心。

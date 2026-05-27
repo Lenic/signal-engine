@@ -215,6 +215,30 @@ batch(() => {
 
 ---
 
+### 5. `setGlobalDeepComparator(comparator)`
+
+Sets a global deep comparator function used by signals when the `comparator: 'deep'` option is specified.
+
+```typescript
+import { setGlobalDeepComparator, signal } from '@lenic/signal';
+
+// Define a deep comparator (simple JSON string comparison)
+const deepEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+// Register the global deep comparator
+setGlobalDeepComparator(deepEqual);
+
+// Signal using deep comparison
+const obj = signal({ count: 1 }, { comparator: 'deep' });
+
+obj.set({ count: 1 }); // No subscriber notification because values are deep equal
+obj.set({ count: 2 }); // Triggers subscribers as values differ
+```
+
+> **Note**: The comparator should be a pure function returning a boolean indicating deep equality.
+
+---
+
 ## 🧹 Memory Management & Parent-Child Disposables
 
 `@lenic/signal` features a robust tree-like cleanup system. Subscriptions are designed to be nested, making it straightforward to build complex hierarchical scopes.

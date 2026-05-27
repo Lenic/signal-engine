@@ -215,6 +215,28 @@ batch(() => {
 
 ---
 
+### 5. `setGlobalDeepComparator(comparator)`
+
+`comparator: 'deep'` オプションが指定されたシグナルで使用される、グローバルな深い比較関数を設定します。
+
+```typescript
+import { setGlobalDeepComparator, signal } from '@lenic/signal';
+
+// 深い比較関数（シンプルな JSON 文字列比較）
+const deepEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+// グローバル深い比較関数を登録
+setGlobalDeepComparator(deepEqual);
+
+// deep 比較を使用するシグナル
+const obj = signal({ count: 1 }, { comparator: 'deep' });
+
+obj.set({ count: 1 }); // 深い等価なので購読者は通知されない
+obj.set({ count: 2 }); // 値が異なるので購読者がトリガーされる
+```
+
+> **注意**: comparator は純粋関数で、ブール値を返す深い等価判定を行う必要があります。
+
 ## 🧹 厳密なメモリ管理とネストされた自動廃棄
 
 `@lenic/signal` は、ツリー構造の堅牢なスコープ廃棄機能を備えており、ネストされたリアクティブ構造を安全に管理できます。
