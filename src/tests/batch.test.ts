@@ -128,4 +128,27 @@ describe('batch', () => {
     b(30);
     expect(normalEffectRun).toBe(3);
   });
+
+  test('only execute once if memo value has not changed during batch', () => {
+    const a = signal(2);
+    const b = signal(3);
+    const c = memo(() => a() + b());
+
+    let runCount = 0;
+    effect(() => {
+      runCount++;
+      c();
+    });
+
+    expect(runCount).toBe(1);
+
+    scheduler.batch(() => {
+      a(3);
+      b(2);
+      a(2);
+      b(3);
+    });
+
+    expect(runCount).toBe(1);
+  });
 });

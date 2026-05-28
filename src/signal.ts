@@ -1,4 +1,12 @@
-import { ISignalValue, Observable, ISignalValueOptions, IObservable, scheduler, ETaskStatus } from './core';
+import {
+  ISignalValue,
+  Observable,
+  ISignalValueOptions,
+  IObservable,
+  scheduler,
+  ETaskStatus,
+  SIGNAL_DEBUG_META,
+} from './core';
 
 function defaultComparator(a: any, b: any) {
   return a === b;
@@ -45,5 +53,11 @@ export function signal<T>(initialValue: T, options?: ISignalValueOptions): ISign
       }
     }
   }
+  getter[SIGNAL_DEBUG_META] = {
+    type: 'signal',
+    get value() {
+      return value;
+    },
+  };
   return getter as ISignalValue<T>;
 }

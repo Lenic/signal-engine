@@ -1,4 +1,4 @@
-import { IObservable, IReadonlySignalValue, ISubscriber, Observable, Subscriber } from './core';
+import { IObservable, IReadonlySignalValue, ISubscriber, Observable, SIGNAL_DEBUG_META, Subscriber } from './core';
 import { Disposable, IDisposable } from './utils';
 
 /**
@@ -38,6 +38,15 @@ export function memo<T>(fn: () => T): IReadonlySignalValue<T> & IDisposable {
   const result = getter as IReadonlySignalValue<T> & IDisposable;
   result.dispose = () => void disposable.dispose();
   result.disposeWithMe = (fn) => void disposable.disposeWithMe(fn);
+  result[SIGNAL_DEBUG_META] = {
+    type: 'memo',
+    get dirty() {
+      return isDirty;
+    },
+    get value() {
+      return value;
+    },
+  };
 
   return result;
 }

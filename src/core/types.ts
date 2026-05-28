@@ -1,4 +1,5 @@
 import { IDisposable, ILinkedList, ILinkedNode } from '../utils';
+import { SIGNAL_DEBUG_META } from './constants';
 
 /**
  * Represents a connection between a subscriber and an observable.
@@ -101,9 +102,23 @@ export interface IScheduler {
 }
 
 /**
+ * Meta data for signal debugging.
+ */
+export interface ISignalMeta extends Record<string, unknown> {
+  /**
+   * Type of the signal.
+   */
+  readonly type: string;
+}
+
+/**
  * Represents a read-only signal value that can be read.
  */
 export interface IReadonlySignalValue<T> {
+  /**
+   * Gets the meta data for debugging.
+   */
+  [SIGNAL_DEBUG_META]: ISignalMeta;
   /**
    * Gets the current value of the signal.
    */
