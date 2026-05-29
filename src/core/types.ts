@@ -1,29 +1,66 @@
-import { IDisposable, ILinkedList, ILinkedNode } from '../utils';
+import { IComparable, IDisposable, ILinkedList, ILinkedNode, IQueueable } from '../utils';
 import { SIGNAL_DEBUG_META } from './constants';
+
+export const ESignalType = {
+  SIGNAL: 'signal',
+  EFFECT: 'effect',
+  MEMO: 'memo',
+} as const;
+export type ESignalType = (typeof ESignalType)[keyof typeof ESignalType];
+
+/**
+ * Base type for all signals.
+ */
+export interface ISignalType {
+  /**
+   * The type of the signal.
+   */
+  readonly type: ESignalType;
+}
+
+export interface IPendingObservable {
+  observable: IObservable;
+  originalValue: any;
+  comparator: IComparable<any>;
+}
 
 /**
  * Represents a connection between a subscriber and an observable.
  */
 export interface IConnector {
-  /** The version of the subscriber when this connection was last validated. */
+  /**
+   * The version of the subscriber when this connection was last validated.
+   */
   lastVersion: number;
-  /** The observable being tracked. */
+  /**
+   * The observable being tracked.
+   */
   observable: IObservable;
-  /** The node in the observable's subscriber list representing this subscription. */
+  /**
+   * The node in the observable's subscriber list representing this subscription.
+   */
   subscriberNode: ILinkedNode<ISubscriber>;
 }
 
 /**
  * Represents an entity that can subscribe to observables and be notified of changes.
  */
-export interface ISubscriber extends IDisposable {
-  /** The current version of the subscriber, incremented on each run. */
+export interface ISubscriber extends ISignalType, IDisposable {
+  /**
+   * The current version of the subscriber, incremented on each run.
+   */
   version: number;
-  /** The children subscribers of this subscriber. */
+  /**
+   * The children subscribers of this subscriber.
+   */
   children: ILinkedList<ISubscriber> | null;
-  /** The list of observables this subscriber currently depends on. */
+  /**
+   * The list of observables this subscriber currently depends on.
+   */
   dependencies: ILinkedList<IConnector>;
-  /** The current connector being processed during the tracking phase. */
+  /**
+   * The current connector being processed during the tracking phase.
+   */
   currentConnector: ILinkedNode<IConnector> | null;
 
   /**
@@ -41,14 +78,15 @@ export interface ISubscriber extends IDisposable {
 /**
  * Represents an entity that can be observed and notifies its subscribers when it changes.
  */
-export interface IObservable {
+export interface IObservable extends ISignalType {
   /**
-   * Indicates whether the observable is currently in the queue to be processed.
-   * This is used to prevent the observable from being added to the queue multiple times.
+   * The queue of pending updates.
    */
-  isInQueue: boolean;
-  /** The list of subscribers currently observing this observable. */
-  subscribers: ILinkedList<ISubscriber>;
+  readonly queue: IQueueable<IPendingObservable>;
+  /**
+   * The list of subscribers currently observing this observable.
+   */
+  readonly subscribers: ILinkedList<ISubscriber>;
 
   /**
    * Registers the active subscriber as a dependency of this observable.
@@ -67,13 +105,6 @@ export const ETaskStatus = {
   RUNNING: 'running',
 } as const;
 export type ETaskStatus = (typeof ETaskStatus)[keyof typeof ETaskStatus];
-
-export interface IPendingObservable {
-  observable: IObservable;
-  originalValue: unknown;
-  comparator(a: unknown, b: unknown): boolean;
-  valueOf(): unknown;
-}
 
 export interface IScheduler {
   deepComparator: null | ((a: unknown, b: unknown) => boolean);
@@ -108,7 +139,15 @@ export interface ISignalMeta extends Record<string, unknown> {
   /**
    * Type of the signal.
    */
-  readonly type: string;
+  readonly type: ESignalType;
+  /**
+   * The unique identifier of the signal.
+   */
+  readonly id: number;
+  /**
+   * The current value of the signal.
+   */
+  readonly value: any;
 }
 
 /**
@@ -130,13 +169,17 @@ export interface IReadonlySignalValue<T> {
  */
 export interface ISignalValueOptions {
   /**
+   * The name of the signal.
+   */
+  name?: string;
+  /**
    * The comparator function to use for comparing values.
    *
    * - `'deep'`: Deep comparison by the global default comparator.
    * - `'shallow'`: Shallow comparison by `===`.
-   * - `(a: T, b: T) => boolean`: Custom comparator.
+   * - `(a: any, b: any) => boolean`: Custom comparator.
    */
-  comparator?: 'deep' | 'shallow' | ((a: unknown, b: unknown) => boolean);
+  comparator?: 'deep' | 'shallow' | ((a: any, b: any) => boolean);
 }
 
 /**

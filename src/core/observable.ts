@@ -1,13 +1,15 @@
-import { ILinkedList, LinkedList } from '../utils';
-import { IConnector, IObservable, ISubscriber } from './types';
+import { ILinkedList, LinkedList, Queueable, IQueueable } from '../utils';
+import { ESignalType, IConnector, IObservable, IPendingObservable, ISubscriber } from './types';
 import { scheduler } from './scheduler';
 
 export class Observable implements IObservable {
-  isInQueue: boolean;
+  type: ESignalType;
+  queue: IQueueable<IPendingObservable>;
   subscribers: ILinkedList<ISubscriber>;
 
-  constructor() {
-    this.isInQueue = false;
+  constructor(type: ESignalType) {
+    this.type = type;
+    this.queue = new Queueable<IPendingObservable>(scheduler.dirtyObservables);
     this.subscribers = new LinkedList<ISubscriber>();
   }
 

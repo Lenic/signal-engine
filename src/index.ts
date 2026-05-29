@@ -1,4 +1,5 @@
 import { scheduler } from './core';
+import { GlobalComparatorOptions } from './utils';
 
 export * from './effect';
 export * from './signal';
@@ -19,5 +20,5 @@ export function batch(action: () => void): void {
  * @param comparator The comparator function.
  */
 export function setGlobalDeepComparator(comparator: (a: unknown, b: unknown) => boolean): void {
-  scheduler.deepComparator = comparator;
+  GlobalComparatorOptions.deepComparator = comparator;
 }

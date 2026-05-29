@@ -208,4 +208,39 @@ describe('memo', () => {
     a(3);
     expect(m()).toBe(6);
   });
+
+  test('unchanged computed values stop propagation to downstream', () => {
+    const a = signal('a', { name: 'a' });
+    const b = memo(
+      () => {
+        a();
+        return 'b';
+      },
+      { name: 'b' },
+    );
+    const c = memo(
+      () => {
+        a();
+        return 'c';
+      },
+      { name: 'c' },
+    );
+
+    let dCalls = 0;
+    const d = memo(
+      () => {
+        dCalls++;
+        return b() + ' ' + c();
+      },
+      { name: 'd' },
+    );
+
+    expect(d()).toBe('b c');
+    dCalls = 0;
+
+    debugger;
+    a('aa');
+    expect(d()).toBe('b c');
+    expect(dCalls).toBe(0);
+  });
 });

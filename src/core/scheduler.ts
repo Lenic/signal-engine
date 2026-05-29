@@ -24,16 +24,16 @@ export const scheduler: IScheduler = {
     flush(this, 'dirtySubscribers', (value) => value.run());
   },
 
-  flushObservables() {
+  flushObservables(): void {
     flush(
       this,
       'dirtyObservables',
       (value) => {
-        if (!value.comparator(value.originalValue, value.valueOf())) {
+        if (!value.comparator.equal(value.originalValue)) {
           value.observable.trigger();
         }
       },
-      (value) => void (value.observable.isInQueue = false),
+      (value) => void value.observable.queue.removeFromQueue(),
     );
   },
 };

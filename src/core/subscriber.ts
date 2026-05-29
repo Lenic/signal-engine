@@ -1,30 +1,35 @@
-import { Disposable, ILinkedList, ILinkedNode, LinkedList } from '../utils';
+import { Disposable, ILinkedList, ILinkedNode, IQueueable, LinkedList, Queueable } from '../utils';
 import { scheduler } from './scheduler';
-import type { IConnector, ISubscriber } from './types';
+import { ESignalType, IConnector, ISubscriber } from './types';
+import { getUniqueId } from './utils';
 
-/**
- * 负责执行 effect
- */
 export class Subscriber extends Disposable implements ISubscriber {
   private isExecuting: boolean;
+  private queue: IQueueable<ISubscriber>;
+  private name: string | undefined;
 
   version: number;
   children: ILinkedList<ISubscriber> | null;
   dependencies: ILinkedList<IConnector>;
-  scheduledNode: ILinkedNode<ISubscriber> | null;
   currentConnector: ILinkedNode<IConnector> | null;
 
+  type: ESignalType;
+  currentId: number;
   runAction: () => void;
 
-  constructor(runAction: () => void) {
+  constructor(runAction: () => void, type: ESignalType = ESignalType.EFFECT, name?: string) {
     super();
 
+    this.name = name;
+
+    this.type = type;
     this.isExecuting = false;
+    this.currentId = getUniqueId();
+    this.queue = new Queueable<ISubscriber>(scheduler.dirtySubscribers);
 
     this.version = 0;
     this.children = null;
     this.dependencies = new LinkedList<IConnector>();
-    this.scheduledNode = null;
     this.currentConnector = null;
 
     this.runAction = runAction;
@@ -47,7 +52,6 @@ export class Subscriber extends Disposable implements ISubscriber {
     try {
       this.isExecuting = true;
 
-      // Reset the tracking pointer to the start of the dependency list
       this.currentConnector = this.dependencies.head;
 
       this.disposeChildren();
@@ -58,20 +62,18 @@ export class Subscriber extends Disposable implements ISubscriber {
         this.runAction();
       }
 
-      // Cleanup phase: remove any connectors that were not visited during the run
       let staleNode = this.currentConnector;
       while (staleNode) {
-        // Remove the subscription from the observable's list
         staleNode.value.subscriberNode.removeSelf();
-        // Remove the connector from the subscriber's dependency list
-        this.dependencies.remove(staleNode);
-        staleNode = staleNode.next;
+        const nextNode = staleNode.next;
+        staleNode.removeSelf();
+        staleNode = nextNode;
       }
       this.currentConnector = null;
     } finally {
       this.isExecuting = false;
 
-      this.scheduledNode = null;
+      this.queue.removeFromQueue();
       scheduler.activeSubscriber = prev;
     }
   }
@@ -80,10 +82,9 @@ export class Subscriber extends Disposable implements ISubscriber {
     if (this.isExecuting) {
       throw new Error('[Subscriber]: Infinite loop detected!!!');
     }
+    if (this.queue.isInQueue || this.isDisposed) return;
 
-    if (this.scheduledNode || this.isDisposed) return;
-
-    this.scheduledNode = scheduler.dirtySubscribers.add(this);
+    this.queue.addToQueue(this);
   }
 
   dispose(): void {
@@ -99,7 +100,7 @@ export class Subscriber extends Disposable implements ISubscriber {
     }
 
     this.disposeChildren();
-    this.scheduledNode?.removeSelf();
+    this.queue.dispose();
 
     this.version = undefined as unknown as number;
     this.children = undefined as unknown as ILinkedList<ISubscriber>;

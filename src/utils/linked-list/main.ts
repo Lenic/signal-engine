@@ -1,12 +1,10 @@
 import { LinkedNode } from './node';
 import { LinkedNodePool } from './pool';
-import { ILinkedList, ILinkedNode } from './types';
+import { ILinkedList, TLinkedListHook, ILinkedNode } from './types';
 
-/**
- * 双向链表类
- */
 export class LinkedList<T> implements ILinkedList<T> {
   private _size: number = 0;
+  private _hooks: TLinkedListHook<T>[] = [];
   private _head: ILinkedNode<T> | null = null;
   private _tail: ILinkedNode<T> | null = null;
 
@@ -22,11 +20,47 @@ export class LinkedList<T> implements ILinkedList<T> {
     return this._tail;
   }
 
-  /**
-   * 添加元素到末尾
-   * @returns 返回 ILinkedNode 接口，限制外部访问范围
-   */
-  public add(value: T): ILinkedNode<T> {
+  add(value: T): ILinkedNode<T> {
+    this._hooks.forEach((fn) => fn('add', value));
+
+    return this.addCore(value);
+  }
+
+  remove(node: ILinkedNode<T>): void {
+    this._hooks.forEach((fn) => fn('remove', node));
+
+    this.removeCore(node);
+  }
+
+  clear(): void {
+    this._hooks.forEach((fn) => fn('clear'));
+
+    this.clearCore();
+  }
+
+  toArray(): T[] {
+    const result: T[] = [];
+    let current = this._head;
+    while (current) {
+      if (current.value !== undefined) {
+        result.push(current.value);
+      }
+      current = current.next;
+    }
+    return result;
+  }
+
+  addHook(fn: TLinkedListHook<T>): () => void {
+    this._hooks.push(fn);
+    return () => {
+      const index = this._hooks.indexOf(fn);
+      if (index >= 0) {
+        this._hooks.splice(index, 1);
+      }
+    };
+  }
+
+  private addCore(value: T): ILinkedNode<T> {
     const newNode = LinkedNodePool.acquire(value, this);
 
     if (!this._head) {
@@ -44,27 +78,19 @@ export class LinkedList<T> implements ILinkedList<T> {
     return newNode;
   }
 
-  /**
-   * 移除节点
-   * @param node 符合 ILinkedNode 接口的对象
-   */
-  public remove(node: ILinkedNode<T>): void {
-    // 将接口强制转换为内部实现类以便操作指针
+  private removeCore(node: ILinkedNode<T>): void {
     const internalNode = node as LinkedNode<T>;
 
-    // 严谨性检查：确保该节点属于当前链表实例
     if (!internalNode || internalNode.list !== this) {
       return;
     }
 
-    // 处理前驱节点的指向
     if (internalNode.prev) {
       internalNode.prev.next = internalNode.next;
     } else {
       this._head = internalNode.next;
     }
 
-    // 处理后继节点的指向
     if (internalNode.next) {
       internalNode.next.prev = internalNode.prev;
     } else {
@@ -73,30 +99,14 @@ export class LinkedList<T> implements ILinkedList<T> {
 
     this._size--;
 
-    // 回收节点到全局对象池
     LinkedNodePool.release(internalNode);
   }
 
-  public clear(): void {
+  private clearCore(): void {
     let current = this._head;
     while (current) {
-      this.remove(current);
+      this.removeCore(current);
       current = current.next;
     }
-  }
-
-  /**
-   * 辅助方法：转换为数组进行观察
-   */
-  public toArray(): T[] {
-    const result: T[] = [];
-    let current = this._head;
-    while (current) {
-      if (current.value !== undefined) {
-        result.push(current.value);
-      }
-      current = current.next;
-    }
-    return result;
   }
 }

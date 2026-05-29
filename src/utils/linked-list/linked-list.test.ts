@@ -53,6 +53,55 @@ describe('LinkedList (With Global Node Pooling)', () => {
     expect(listB.size).toBe(0);
   });
 
+  test('Hooks: add, remove, clear, and unsubscribe', () => {
+    const list = new LinkedList<number>();
+    const events: { type: string; val?: any }[] = [];
+
+    const removeAddHook = list.addHook((type, arg?) => {
+      if (type === 'add') {
+        events.push({ type, val: arg });
+      }
+    });
+
+    const removeRemoveHook = list.addHook((type, arg?) => {
+      if (type === 'remove') {
+        events.push({ type, val: arg?.value });
+      }
+    });
+
+    const removeClearHook = list.addHook((type, _?) => {
+      if (type === 'clear') {
+        events.push({ type });
+      }
+    });
+
+    const node1 = list.add(10);
+    list.add(20);
+    expect(events).toEqual([
+      { type: 'add', val: 10 },
+      { type: 'add', val: 20 },
+    ]);
+    events.length = 0;
+
+    list.remove(node1);
+    expect(events).toEqual([{ type: 'remove', val: 10 }]);
+    events.length = 0;
+
+    list.clear();
+    expect(events).toEqual([{ type: 'clear' }]);
+    events.length = 0;
+
+    removeAddHook();
+    removeRemoveHook();
+    removeClearHook();
+
+    const node3 = list.add(30);
+    list.remove(node3);
+    list.clear();
+
+    expect(events).toEqual([]);
+  });
+
   test('Object pool reuse: verify node recycling and reuse', () => {
     const list = new LinkedList<number>();
 
