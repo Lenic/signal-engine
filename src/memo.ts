@@ -1,14 +1,6 @@
-import {
-  ESignalType,
-  getUniqueId,
-  IObservable,
-  IReadonlySignalValue,
-  ISignalValueOptions,
-  ISubscriber,
-  Observable,
-  SIGNAL_DEBUG_META,
-  Subscriber,
-} from './core';
+import { SIGNAL_DEBUG_META } from './constants';
+import { ESignalType, IObservable, ISubscriber, Observable, Subscriber } from './core';
+import { IReadonlySignalValue, ISignalValueOptions } from './types';
 import { Comparable, Disposable, IComparable, IDisposable } from './utils';
 
 /**
@@ -23,60 +15,74 @@ import { Comparable, Disposable, IComparable, IDisposable } from './utils';
  */
 export function memo<T>(fn: () => T, options?: ISignalValueOptions): IReadonlySignalValue<T> & IDisposable {
   let isDirty = true;
-
-  const currentId = getUniqueId();
-  const observable: IObservable = new Observable(ESignalType.MEMO);
-
   let hasEffect = false;
-  const disposeListener = observable.subscribers.addHook((type, payload?) => {
-    if (type === 'add') {
-      if (!hasEffect && payload.type === ESignalType.EFFECT) {
-        hasEffect = true;
-      }
-    } else if (type === 'clear') {
-      hasEffect = false;
-    } else {
-      if (!hasEffect && payload.value.type !== ESignalType.EFFECT) {
-        // do nothing...
-      } else if (hasEffect && payload.value.type !== ESignalType.EFFECT) {
-        // do nothing...
-      } else {
-        hasEffect = false;
-        let node = observable.subscribers.head;
-        while (node) {
-          if (node.value.type === ESignalType.EFFECT) {
-            hasEffect = true;
-            break;
-          }
-          node = node.next;
-        }
-      }
-    }
-  });
-
+  const disposable = new Disposable();
   const comparator: IComparable<T> = new Comparable<T>(options?.comparator);
-  const subscriber: ISubscriber = new Subscriber(
-    () => {
-      if (!isDirty) {
-        if (hasEffect) {
-          const newValue = fn();
-          if (!comparator.equal(newValue)) {
-            comparator.set(newValue);
-            observable.trigger();
-          }
+
+  const observable: IObservable = new Observable({
+    type: ESignalType.MEMO,
+    name: options?.name ? `memo(${options.name})-observable` : undefined,
+  });
+  disposable.disposeWithMe(
+    observable.subscribers.addHook((type, payload?) => {
+      if (type === 'add') {
+        if (!hasEffect && payload.type === ESignalType.EFFECT) {
+          hasEffect = true;
+        }
+      } else if (type === 'clear') {
+        hasEffect = false;
+      } else {
+        if (!hasEffect && payload.value.type !== ESignalType.EFFECT) {
+          // do nothing...
+        } else if (hasEffect && payload.value.type !== ESignalType.EFFECT) {
+          // do nothing...
         } else {
-          isDirty = true;
-          observable.trigger();
+          hasEffect = false;
+          let node = observable.subscribers.head;
+          while (node) {
+            if (node.value.type === ESignalType.EFFECT) {
+              hasEffect = true;
+              break;
+            }
+            node = node.next;
+          }
         }
       }
-    },
-    ESignalType.MEMO,
-    options?.name ? `memo(${options.name})-effect` : undefined,
+    }),
   );
 
-  function getter(): T {
+  const subscriber: ISubscriber = new Subscriber(
+    () => {
+      if (hasEffect) {
+        const newValue = fn();
+        if (!comparator.equal(newValue)) {
+          comparator.set(newValue);
+          isDirty = false;
+          observable.upgradeVersion();
+          observable.trigger();
+        }
+      } else {
+        isDirty = true;
+        observable.trigger();
+        subscriber.setConnectorNode(null);
+      }
+    },
+    {
+      type: ESignalType.MEMO,
+      name: options?.name ? `memo(${options.name})-effect` : undefined,
+    },
+  );
+  disposable.disposeWithMe(subscriber);
+
+  function memoFn(): T {
     if (isDirty) {
-      subscriber.run(() => void comparator.set(fn()));
+      subscriber.run(() => {
+        const nextValue = fn();
+        if (!comparator.equal(nextValue)) {
+          comparator.set(nextValue);
+          observable.upgradeVersion();
+        }
+      });
       isDirty = false;
     }
 
@@ -84,11 +90,7 @@ export function memo<T>(fn: () => T, options?: ISignalValueOptions): IReadonlySi
     return comparator.value;
   }
 
-  const disposable = new Disposable();
-  disposable.disposeWithMe(subscriber);
-  disposable.disposeWithMe(disposeListener);
-
-  const result = getter as IReadonlySignalValue<T> & IDisposable;
+  const result = memoFn as IReadonlySignalValue<T> & IDisposable;
   result.dispose = () => void disposable.dispose();
   result.disposeWithMe = (fn) => void disposable.disposeWithMe(fn);
   result[SIGNAL_DEBUG_META] = {
@@ -98,9 +100,6 @@ export function memo<T>(fn: () => T, options?: ISignalValueOptions): IReadonlySi
     },
     get value() {
       return comparator.value;
-    },
-    get id() {
-      return currentId;
     },
     name: options?.name,
     observable,

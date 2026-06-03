@@ -1,61 +1,64 @@
 import { Disposable, ILinkedList, ILinkedNode, IQueueable, LinkedList, Queueable } from '../utils';
 import { scheduler } from './scheduler';
-import { ESignalType, IConnector, ISubscriber } from './types';
+import { ESignalType, IConnector, ISignalOptions, ISubscriber } from './types';
 import { getUniqueId } from './utils';
 
 export class Subscriber extends Disposable implements ISubscriber {
+  private isInitial: boolean;
   private isExecuting: boolean;
+  private runAction: () => void;
   private queue: IQueueable<ISubscriber>;
-  private name: string | undefined;
 
+  id: number;
+  name?: string;
   version: number;
+  type: ESignalType;
   children: ILinkedList<ISubscriber> | null;
   dependencies: ILinkedList<IConnector>;
   currentConnector: ILinkedNode<IConnector> | null;
 
-  type: ESignalType;
-  currentId: number;
-  runAction: () => void;
-
-  constructor(runAction: () => void, type: ESignalType = ESignalType.EFFECT, name?: string) {
+  constructor(runAction: () => void, options?: ISignalOptions) {
     super();
-
-    this.name = name;
-
-    this.type = type;
-    this.isExecuting = false;
-    this.currentId = getUniqueId();
-    this.queue = new Queueable<ISubscriber>(scheduler.dirtySubscribers);
 
     this.version = 0;
     this.children = null;
-    this.dependencies = new LinkedList<IConnector>();
+    this.isInitial = true;
+    this.isExecuting = false;
     this.currentConnector = null;
 
+    this.name = options?.name;
     this.runAction = runAction;
+    this.type = options?.type ?? ESignalType.EFFECT;
+
+    this.id = getUniqueId();
+    this.dependencies = new LinkedList<IConnector>();
+    this.queue = new Queueable<ISubscriber>(scheduler.dirtySubscribers);
 
     const parent = scheduler.activeSubscriber;
     if (parent) {
       if (!parent.children) {
         parent.children = new LinkedList<ISubscriber>();
       }
-      parent.children.add(this);
+      const nodeInParent = parent.children.add(this);
+      this.disposeWithMe(() => nodeInParent.removeSelf());
     }
   }
 
   run(customAction?: () => void): void {
     this.checkDisposed();
 
+    if (!this.isChanged()) return;
+
     const prev = scheduler.activeSubscriber;
     scheduler.activeSubscriber = this;
 
     try {
+      this.version = 0;
       this.isExecuting = true;
 
       this.currentConnector = this.dependencies.head;
 
       this.disposeChildren();
-      this.version += 1;
       if (customAction) {
         customAction();
       } else {
@@ -87,6 +90,11 @@ export class Subscriber extends Disposable implements ISubscriber {
     this.queue.addToQueue(this);
   }
 
+  setConnectorNode(connectorNode: ILinkedNode<IConnector> | null): void {
+    this.currentConnector = connectorNode;
+    this.version += 1;
+  }
+
   dispose(): void {
     if (this.isDisposed) return;
 
@@ -99,14 +107,14 @@ export class Subscriber extends Disposable implements ISubscriber {
       node = this.dependencies.head;
     }
 
-    this.disposeChildren();
     this.queue.dispose();
+    this.disposeChildren();
 
     this.version = undefined as unknown as number;
+    this.runAction = undefined as unknown as () => void;
     this.children = undefined as unknown as ILinkedList<ISubscriber>;
     this.dependencies = undefined as unknown as ILinkedList<IConnector>;
     this.currentConnector = undefined as unknown as ILinkedNode<IConnector>;
-    this.runAction = undefined as unknown as () => void;
   }
 
   private disposeChildren(): void {
@@ -118,5 +126,20 @@ export class Subscriber extends Disposable implements ISubscriber {
         child = this.children.head;
       }
     }
+  }
+
+  private isChanged() {
+    if (this.isInitial) {
+      this.isInitial = false;
+      return true;
+    }
+
+    let node = this.dependencies.head;
+    while (node) {
+      const { value } = node;
+      if (value.lastObservableVersion !== value.observable.version) return true;
+      node = node.next;
+    }
+    return false;
   }
 }

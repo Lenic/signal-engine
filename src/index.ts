@@ -6,6 +6,7 @@ export * from './signal';
 export * from './memo';
 export * from './core';
 export * from './utils';
+export * from './constants';
 
 /**
  * Runs a task in the scheduler's context.

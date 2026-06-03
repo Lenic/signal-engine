@@ -5,14 +5,17 @@ import { memo } from '../memo';
 
 describe('memo', () => {
   test('basic computation', () => {
-    const a = signal(1);
-    const b = signal(2);
+    const a = signal(1, { name: 'a' });
+    const b = signal(2, { name: 'b' });
 
     let runCount = 0;
-    const m = memo(() => {
-      runCount++;
-      return a() + b();
-    });
+    const m = memo(
+      () => {
+        runCount++;
+        return a() + b();
+      },
+      { name: 'm' },
+    );
 
     // Lazy: not run yet
     expect(runCount).toBe(0);
@@ -190,13 +193,16 @@ describe('memo', () => {
   });
 
   test('error propagation and recovery in memo', () => {
-    const a = signal(1);
-    const m = memo(() => {
-      if (a() === 2) {
-        throw new Error('Memo execution failed');
-      }
-      return a() * 2;
-    });
+    const a = signal(1, { name: 'a' });
+    const m = memo(
+      () => {
+        if (a() === 2) {
+          throw new Error('Memo execution failed');
+        }
+        return a() * 2;
+      },
+      { name: 'm' },
+    );
 
     expect(m()).toBe(2);
 
@@ -238,7 +244,6 @@ describe('memo', () => {
     expect(d()).toBe('b c');
     dCalls = 0;
 
-    debugger;
     a('aa');
     expect(d()).toBe('b c');
     expect(dCalls).toBe(0);

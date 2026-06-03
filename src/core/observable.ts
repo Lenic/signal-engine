@@ -1,16 +1,25 @@
 import { ILinkedList, LinkedList, Queueable, IQueueable } from '../utils';
-import { ESignalType, IConnector, IObservable, IPendingObservable, ISubscriber } from './types';
+import { ESignalType, IConnector, IObservable, IPendingObservable, ISignalOptions, ISubscriber } from './types';
 import { scheduler } from './scheduler';
+import { getUniqueId } from './utils';
 
 export class Observable implements IObservable {
+  id: number;
+  name?: string;
+  version: number;
   type: ESignalType;
   queue: IQueueable<IPendingObservable>;
   subscribers: ILinkedList<ISubscriber>;
 
-  constructor(type: ESignalType) {
-    this.type = type;
-    this.queue = new Queueable<IPendingObservable>(scheduler.dirtyObservables);
+  constructor(options?: ISignalOptions) {
+    this.version = 0;
+
+    this.name = options?.name;
+    this.type = options?.type ?? ESignalType.SIGNAL;
+
+    this.id = getUniqueId();
     this.subscribers = new LinkedList<ISubscriber>();
+    this.queue = new Queueable<IPendingObservable>(scheduler.dirtyObservables);
   }
 
   track(): void {
@@ -21,8 +30,9 @@ export class Observable implements IObservable {
 
     // 1. If the current connector already matches the observable, just update the version
     if (node && node.value.observable === this) {
-      node.value.lastVersion = subscriber.version;
-      subscriber.currentConnector = node.next;
+      node.value.lastObservableVersion = this.version;
+      node.value.lastRunVersion = subscriber.version;
+      subscriber.setConnectorNode(node.next);
       return;
     }
 
@@ -37,15 +47,16 @@ export class Observable implements IObservable {
     const connector: IConnector = {
       subscriberNode,
       observable: this,
-      lastVersion: subscriber.version,
+      lastRunVersion: subscriber.version,
+      lastObservableVersion: this.version,
     };
 
     // 4. Update the list and move the pointer forward
     if (node) {
       node.value = connector;
-      subscriber.currentConnector = node.next;
+      subscriber.setConnectorNode(node.next);
     } else {
-      subscriber.currentConnector = subscriber.dependencies.add(connector).next;
+      subscriber.setConnectorNode(subscriber.dependencies.add(connector).next);
     }
   }
 
@@ -57,5 +68,9 @@ export class Observable implements IObservable {
         current = current.next;
       }
     });
+  }
+
+  upgradeVersion(): void {
+    this.version += 1;
   }
 }

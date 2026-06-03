@@ -32,9 +32,7 @@ export class Comparable<T> implements IComparable<T> {
    * @returns `true` if the original value is equal to the target value, `false` otherwise.
    */
   equal(target: T): boolean {
-    if (this.value === DEFAULT_VALUE) {
-      throw new Error('[Comparable]: Please set the original value before using the comparator.');
-    }
+    if (this.value === DEFAULT_VALUE) return false;
 
     return this.comparator(this.value, target);
   }

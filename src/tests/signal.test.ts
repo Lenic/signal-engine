@@ -1,8 +1,13 @@
-import { describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test } from 'vitest';
 import { signal } from '../signal';
 import { effect } from '../effect';
+import { GlobalComparatorOptions } from '../utils';
 
 describe('signal', () => {
+  beforeEach(() => {
+    GlobalComparatorOptions.deepComparator = null;
+  });
+
   test('basic read and write', () => {
     const s = signal(1);
     expect(s()).toBe(1);
@@ -31,6 +36,7 @@ describe('signal', () => {
   });
 
   test('object references and mutations', () => {
+    debugger;
     const initialObj = { value: 1 };
     const s = signal(initialObj);
     let runCount = 0;

@@ -2,7 +2,6 @@ import { LinkedList } from '../utils';
 import { ETaskStatus, type IScheduler, type ISubscriber, type IPendingObservable } from './types';
 
 export const scheduler: IScheduler = {
-  deepComparator: null,
   activeSubscriber: null,
   status: ETaskStatus.IDLE,
   dirtySubscribers: new LinkedList<ISubscriber>(),
@@ -10,7 +9,7 @@ export const scheduler: IScheduler = {
 
   batch(action: () => void): void {
     const prev = this.status;
-    this.status = ETaskStatus.RUNNING;
+    this.status = ETaskStatus.UPDATING;
     try {
       action();
     } finally {
@@ -30,6 +29,7 @@ export const scheduler: IScheduler = {
       'dirtyObservables',
       (value) => {
         if (!value.comparator.equal(value.originalValue)) {
+          value.observable.upgradeVersion();
           value.observable.trigger();
         }
       },
