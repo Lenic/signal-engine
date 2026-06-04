@@ -5,6 +5,7 @@ import { memo } from '../memo';
 
 describe('memo', () => {
   test('basic computation', () => {
+    debugger;
     const a = signal(1, { name: 'a' });
     const b = signal(2, { name: 'b' });
 
@@ -60,19 +61,25 @@ describe('memo', () => {
   });
 
   test('nested memos (chained dependencies)', () => {
-    const a = signal(2);
+    const a = signal(2, { name: 'a' });
     let bRunCount = 0;
     let cRunCount = 0;
 
-    const b = memo(() => {
-      bRunCount++;
-      return a() * 2; // 4
-    });
+    const b = memo(
+      () => {
+        bRunCount++;
+        return a() * 2; // 4
+      },
+      { name: 'b' },
+    );
 
-    const c = memo(() => {
-      cRunCount++;
-      return b() + 5; // 9
-    });
+    const c = memo(
+      () => {
+        cRunCount++;
+        return b() + 5; // 9
+      },
+      { name: 'c' },
+    );
 
     expect(bRunCount).toBe(0);
     expect(cRunCount).toBe(0);

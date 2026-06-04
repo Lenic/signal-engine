@@ -159,6 +159,19 @@ export interface ISubscriber extends ISignalObject, IDisposable {
 }
 
 /**
+ * Options for observable.
+ */
+export interface IObservableOptions extends ISignalOptions {
+  /**
+   * The action to refresh the version of the observable.
+   *
+   * - if not provided, the version will return directly.
+   * - used by memo signal to refresh the version when the dependencies have changed.
+   */
+  refreshVersionAction?: () => void;
+}
+
+/**
  * Represents an entity that can be observed and notifies its subscribers when it changes.
  */
 export interface IObservable extends ISignalObject {
@@ -180,7 +193,10 @@ export interface IObservable extends ISignalObject {
    * Notifies all subscribers that the observable's value has changed.
    */
   trigger(): void;
-
+  /**
+   * Gets the current version of the observable.
+   */
+  getVersion(): number;
   /**
    * Upgrades the version of the observable.
    */
@@ -218,4 +234,8 @@ export interface IScheduler {
    * Flushes the dirty observables.
    */
   flushObservables(): void;
+  /**
+   * Executes a task without any extra context.
+   */
+  untrack(action: () => void): void;
 }

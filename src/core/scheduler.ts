@@ -1,5 +1,5 @@
 import { LinkedList } from '../utils';
-import { ETaskStatus, type IScheduler, type ISubscriber, type IPendingObservable } from './types';
+import { ETaskStatus, IScheduler, ISubscriber, IPendingObservable } from './types';
 
 export const scheduler: IScheduler = {
   activeSubscriber: null,
@@ -29,12 +29,31 @@ export const scheduler: IScheduler = {
       'dirtyObservables',
       (value) => {
         if (!value.comparator.equal(value.originalValue)) {
-          value.observable.upgradeVersion();
           value.observable.trigger();
         }
       },
       (value) => void value.observable.queue.removeFromQueue(),
     );
+  },
+
+  untrack(action: () => void): void {
+    const prevStatus = this.status;
+    const prevSubscribers = this.dirtySubscribers;
+    const prevObservables = this.dirtyObservables;
+    const prevActiveSubscriber = this.activeSubscriber;
+
+    this.activeSubscriber = null;
+    this.status = ETaskStatus.IDLE;
+    this.dirtySubscribers = new LinkedList<ISubscriber>();
+    this.dirtyObservables = new LinkedList<IPendingObservable>();
+    try {
+      action();
+    } finally {
+      this.status = prevStatus;
+      this.dirtySubscribers = prevSubscribers;
+      this.dirtyObservables = prevObservables;
+      this.activeSubscriber = prevActiveSubscriber;
+    }
   },
 };
 

@@ -4,7 +4,6 @@ import { ESignalType, IConnector, ISignalOptions, ISubscriber } from './types';
 import { getUniqueId } from './utils';
 
 export class Subscriber extends Disposable implements ISubscriber {
-  private isInitial: boolean;
   private isExecuting: boolean;
   private runAction: () => void;
   private queue: IQueueable<ISubscriber>;
@@ -22,7 +21,6 @@ export class Subscriber extends Disposable implements ISubscriber {
 
     this.version = 0;
     this.children = null;
-    this.isInitial = true;
     this.isExecuting = false;
     this.currentConnector = null;
 
@@ -46,8 +44,6 @@ export class Subscriber extends Disposable implements ISubscriber {
 
   run(customAction?: () => void): void {
     this.checkDisposed();
-
-    if (!this.isChanged()) return;
 
     const prev = scheduler.activeSubscriber;
     scheduler.activeSubscriber = this;
@@ -126,20 +122,5 @@ export class Subscriber extends Disposable implements ISubscriber {
         child = this.children.head;
       }
     }
-  }
-
-  private isChanged() {
-    if (this.isInitial) {
-      this.isInitial = false;
-      return true;
-    }
-
-    let node = this.dependencies.head;
-    while (node) {
-      const { value } = node;
-      if (value.lastObservableVersion !== value.observable.version) return true;
-      node = node.next;
-    }
-    return false;
   }
 }

@@ -10,11 +10,8 @@ import { Comparable, IComparable } from './utils';
  * @returns A signal with the given initial value.
  */
 export function signal<T>(initialValue: T, options?: ISignalValueOptions): ISignalValue<T> {
-  const observable: IObservable = new Observable({
-    type: ESignalType.SIGNAL,
-    name: options?.name,
-  });
   const comparator: IComparable<T> = new Comparable<T>(options?.comparator, initialValue);
+  const observable: IObservable = new Observable({ type: ESignalType.SIGNAL, name: options?.name });
 
   function signalFn(...args: T[]): any {
     if (args.length === 0) {

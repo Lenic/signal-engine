@@ -1,9 +1,11 @@
 import { ILinkedList, LinkedList, Queueable, IQueueable } from '../utils';
-import { ESignalType, IConnector, IObservable, IPendingObservable, ISignalOptions, ISubscriber } from './types';
+import { ESignalType, IConnector, IObservable, IPendingObservable, IObservableOptions, ISubscriber } from './types';
 import { scheduler } from './scheduler';
 import { getUniqueId } from './utils';
 
 export class Observable implements IObservable {
+  private refreshVersionAction?: () => void;
+
   id: number;
   name?: string;
   version: number;
@@ -11,11 +13,12 @@ export class Observable implements IObservable {
   queue: IQueueable<IPendingObservable>;
   subscribers: ILinkedList<ISubscriber>;
 
-  constructor(options?: ISignalOptions) {
+  constructor(options?: IObservableOptions) {
     this.version = 0;
 
     this.name = options?.name;
     this.type = options?.type ?? ESignalType.SIGNAL;
+    this.refreshVersionAction = options?.refreshVersionAction;
 
     this.id = getUniqueId();
     this.subscribers = new LinkedList<ISubscriber>();
@@ -68,6 +71,12 @@ export class Observable implements IObservable {
         current = current.next;
       }
     });
+  }
+
+  getVersion(): number {
+    this.refreshVersionAction?.();
+
+    return this.version;
   }
 
   upgradeVersion(): void {

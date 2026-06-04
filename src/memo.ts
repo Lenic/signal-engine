@@ -1,5 +1,5 @@
 import { SIGNAL_DEBUG_META } from './constants';
-import { ESignalType, IObservable, ISubscriber, Observable, Subscriber } from './core';
+import { ESignalType, IObservable, ISubscriber, Observable, scheduler, Subscriber } from './core';
 import { IReadonlySignalValue, ISignalValueOptions } from './types';
 import { Comparable, Disposable, IComparable, IDisposable } from './utils';
 
@@ -15,57 +15,34 @@ import { Comparable, Disposable, IComparable, IDisposable } from './utils';
  */
 export function memo<T>(fn: () => T, options?: ISignalValueOptions): IReadonlySignalValue<T> & IDisposable {
   let isDirty = true;
-  let hasEffect = false;
+  let isInitial = true;
   const disposable = new Disposable();
   const comparator: IComparable<T> = new Comparable<T>(options?.comparator);
+
+  function refreshValue() {
+    const nextValue = fn();
+    if (!comparator.equal(nextValue)) {
+      comparator.set(nextValue);
+      observable.upgradeVersion();
+    }
+  }
 
   const observable: IObservable = new Observable({
     type: ESignalType.MEMO,
     name: options?.name ? `memo(${options.name})-observable` : undefined,
-  });
-  disposable.disposeWithMe(
-    observable.subscribers.addHook((type, payload?) => {
-      if (type === 'add') {
-        if (!hasEffect && payload.type === ESignalType.EFFECT) {
-          hasEffect = true;
-        }
-      } else if (type === 'clear') {
-        hasEffect = false;
-      } else {
-        if (!hasEffect && payload.value.type !== ESignalType.EFFECT) {
-          // do nothing...
-        } else if (hasEffect && payload.value.type !== ESignalType.EFFECT) {
-          // do nothing...
-        } else {
-          hasEffect = false;
-          let node = observable.subscribers.head;
-          while (node) {
-            if (node.value.type === ESignalType.EFFECT) {
-              hasEffect = true;
-              break;
-            }
-            node = node.next;
-          }
-        }
+    refreshVersionAction: () => {
+      if (isDirty) {
+        isDirty = false;
+        scheduler.untrack(refreshValue);
       }
-    }),
-  );
+    },
+  });
 
   const subscriber: ISubscriber = new Subscriber(
     () => {
-      if (hasEffect) {
-        const newValue = fn();
-        if (!comparator.equal(newValue)) {
-          comparator.set(newValue);
-          isDirty = false;
-          observable.upgradeVersion();
-          observable.trigger();
-        }
-      } else {
-        isDirty = true;
-        observable.trigger();
-        subscriber.setConnectorNode(null);
-      }
+      isDirty = true;
+      observable.trigger();
+      subscriber.setConnectorNode(null);
     },
     {
       type: ESignalType.MEMO,
@@ -75,15 +52,25 @@ export function memo<T>(fn: () => T, options?: ISignalValueOptions): IReadonlySi
   disposable.disposeWithMe(subscriber);
 
   function memoFn(): T {
-    if (isDirty) {
-      subscriber.run(() => {
-        const nextValue = fn();
-        if (!comparator.equal(nextValue)) {
-          comparator.set(nextValue);
-          observable.upgradeVersion();
-        }
-      });
+    if (isDirty || isInitial) {
       isDirty = false;
+      subscriber.run(() => {
+        let isChanged = isInitial;
+        if (!isChanged) {
+          let node = subscriber.dependencies.head;
+          while (node) {
+            if (node.value.observable.getVersion() > node.value.lastObservableVersion) {
+              isChanged = true;
+              break;
+            }
+            node = node.next;
+          }
+          if (!isChanged) return;
+        }
+
+        refreshValue();
+      });
+      isInitial = false;
     }
 
     observable.track();
