@@ -1,13 +1,19 @@
 import { ILinkedList, ILinkedListInternalActions, ILinkedNode } from './types';
 
 export class LinkedNode<T> implements ILinkedNode<T> {
-  public value: T;
-  public prev: ILinkedNode<T> | null = null;
-  public next: ILinkedNode<T> | null = null;
-  public list: ILinkedList<T> | null = null;
+  value: T;
+  prev: ILinkedNode<T> | null;
+  next: ILinkedNode<T> | null;
+  list: ILinkedList<T> | null;
+  onRemoved: ((node: ILinkedNode<T>) => void) | null;
 
   constructor(value: T) {
     this.value = value;
+
+    this.prev = null;
+    this.next = null;
+    this.list = null;
+    this.onRemoved = null;
   }
 
   insertBefore(value: T): ILinkedNode<T> {
@@ -35,9 +41,12 @@ export class LinkedNode<T> implements ILinkedNode<T> {
   }
 
   clear(): void {
+    this.onRemoved?.(this);
+
     this.value = undefined as unknown as T;
     this.prev = null;
     this.next = null;
     this.list = null;
+    this.onRemoved = null;
   }
 }

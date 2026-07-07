@@ -185,4 +185,50 @@ describe('LinkedList (With Global Node Pooling)', () => {
     expect(() => listB.insertNodeBefore(nodeA, 2)).toThrow('[LinkedNode]: the node does not belong to this list.');
     expect(() => listB.insertNodeAfter(nodeA, 2)).toThrow('[LinkedNode]: the node does not belong to this list.');
   });
+
+  test('onRemoved callback: triggered when node is removed under different methods', () => {
+    const list = new LinkedList<number>();
+
+    // 1. Test removeSelf()
+    const node1 = list.append(10);
+    let called1 = 0;
+    let valueInCallback1: number | undefined;
+    node1.onRemoved = (n) => {
+      called1++;
+      valueInCallback1 = n.value;
+    };
+    node1.removeSelf();
+    expect(called1).toBe(1);
+    expect(valueInCallback1).toBe(10);
+    expect(node1.onRemoved).toBeNull();
+    expect(node1.value).toBeUndefined();
+
+    // 2. Test list.remove(node)
+    const node2 = list.append(20);
+    let called2 = 0;
+    let valueInCallback2: number | undefined;
+    node2.onRemoved = (n) => {
+      called2++;
+      valueInCallback2 = n.value;
+    };
+    list.remove(node2);
+    expect(called2).toBe(1);
+    expect(valueInCallback2).toBe(20);
+    expect(node2.onRemoved).toBeNull();
+    expect(node2.value).toBeUndefined();
+
+    // 3. Test list.clear()
+    const node3 = list.append(30);
+    let called3 = 0;
+    let valueInCallback3: number | undefined;
+    node3.onRemoved = (n) => {
+      called3++;
+      valueInCallback3 = n.value;
+    };
+    list.clear();
+    expect(called3).toBe(1);
+    expect(valueInCallback3).toBe(30);
+    expect(node3.onRemoved).toBeNull();
+    expect(node3.value).toBeUndefined();
+  });
 });

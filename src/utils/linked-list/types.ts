@@ -36,6 +36,16 @@ export interface ILinkedNode<T> {
    * Removes this node from its parent linked list.
    */
   removeSelf(): void;
+
+  /**
+   * Callback function to be executed when the node is removed
+   *
+   * - the callback would trigger once only
+   * - it will be called just after removed from the list
+   * - the callback will be set to null after trigger to prevent multiple triggers
+   * - the node will set the onRemoved, prev, next, value to null after trigger to break all references
+   */
+  onRemoved: ((node: ILinkedNode<T>) => void) | null;
 }
 
 /**
