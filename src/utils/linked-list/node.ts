@@ -1,8 +1,5 @@
-import { ILinkedList, ILinkedNode } from './types';
+import { ILinkedList, ILinkedListInternalActions, ILinkedNode } from './types';
 
-/**
- * 内部节点类，实现 ILinkedNode 接口
- */
 export class LinkedNode<T> implements ILinkedNode<T> {
   public value: T;
   public prev: ILinkedNode<T> | null = null;
@@ -13,21 +10,31 @@ export class LinkedNode<T> implements ILinkedNode<T> {
     this.value = value;
   }
 
-  /**
-   * 实现接口的 remove 方法
-   */
-  public removeSelf(): void {
+  insertBefore(value: T): ILinkedNode<T> {
+    if (!this.list) {
+      throw new Error('[LinkedNode]: can not find the owning list.');
+    }
+
+    return (this.list as unknown as ILinkedListInternalActions<T>).insertNodeBefore(this, value);
+  }
+
+  insertAfter(value: T): ILinkedNode<T> {
+    if (!this.list) {
+      throw new Error('[LinkedNode]: can not find the owning list.');
+    }
+
+    return (this.list as unknown as ILinkedListInternalActions<T>).insertNodeAfter(this, value);
+  }
+
+  removeSelf(): void {
     if (this.list) {
-      // 这里的 this 就是当前的 LinkedNode 实例
       this.list.remove(this);
+
       this.clear();
     }
   }
 
-  /**
-   * 清理节点数据，准备回归对象池
-   */
-  public clear(): void {
+  clear(): void {
     this.value = undefined as unknown as T;
     this.prev = null;
     this.next = null;

@@ -5,19 +5,20 @@ import { LinkedList } from './main';
 describe('LinkedList (With Global Node Pooling)', () => {
   test('Basic functionality: add elements and maintain order', () => {
     const list = new LinkedList<number>();
-    list.add(1);
-    list.add(2);
-    list.add(3);
+    list.append(1);
+    list.append(2);
+    list.append(3);
 
     expect(list.size).toBe(3);
     expect(list.toArray()).toEqual([1, 2, 3]);
   });
 
   test('Node self-removal: remove via ILinkedNode.removeSelf()', () => {
+    debugger;
     const list = new LinkedList<string>();
-    const n1 = list.add('a');
-    const n2 = list.add('b');
-    const n3 = list.add('c');
+    const n1 = list.append('a');
+    const n2 = list.append('b');
+    const n3 = list.append('c');
 
     n2.removeSelf();
 
@@ -34,7 +35,7 @@ describe('LinkedList (With Global Node Pooling)', () => {
 
   test('LinkedList instance deletion: remove via list.remove(node)', () => {
     const list = new LinkedList<number>();
-    const node = list.add(100);
+    const node = list.append(100);
 
     list.remove(node);
 
@@ -46,8 +47,8 @@ describe('LinkedList (With Global Node Pooling)', () => {
     const listA = new LinkedList<number>();
     const listB = new LinkedList<number>();
 
-    const nodeA = listA.add(1);
-    listB.remove(nodeA);
+    const nodeA = listA.append(1);
+    expect(() => listB.remove(nodeA)).toThrow('[LinkedNode]: the node does not belong to this list.');
 
     expect(listA.size).toBe(1);
     expect(listB.size).toBe(0);
@@ -56,11 +57,11 @@ describe('LinkedList (With Global Node Pooling)', () => {
   test('Object pool reuse: verify node recycling and reuse', () => {
     const list = new LinkedList<number>();
 
-    const node1 = list.add(10);
+    const node1 = list.append(10);
     const node1Ref = node1;
     node1.removeSelf();
     expect(node1.value).toBeUndefined();
-    const node2 = list.add(20);
+    const node2 = list.append(20);
 
     expect(node2).toBe(node1Ref);
     expect(node2.value).toBe(20);
@@ -71,10 +72,10 @@ describe('LinkedList (With Global Node Pooling)', () => {
     const numList = new LinkedList<number>();
     const strList = new LinkedList<string>();
 
-    const n1 = numList.add(123);
+    const n1 = numList.append(123);
     n1.removeSelf();
 
-    const s1 = strList.add('hello');
+    const s1 = strList.append('hello');
 
     expect(s1.value).toBe('hello');
     expect(typeof s1.value).toBe('string');
@@ -85,7 +86,7 @@ describe('LinkedList (With Global Node Pooling)', () => {
     const nodes: ILinkedNode<number>[] = [];
 
     for (let i = 0; i < 100; i++) {
-      nodes.push(list.add(i));
+      nodes.push(list.append(i));
     }
     expect(list.size).toBe(100);
 
@@ -94,5 +95,94 @@ describe('LinkedList (With Global Node Pooling)', () => {
     }
     expect(list.size).toBe(50);
     expect(list.toArray()[0]).toBe(50);
+  });
+
+  test('Prepend: add elements to the front', () => {
+    const list = new LinkedList<number>();
+
+    // Prepend to empty list
+    const n1 = list.prepend(1);
+    expect(list.size).toBe(1);
+    expect(list.head).toBe(n1);
+    expect(list.tail).toBe(n1);
+    expect(list.toArray()).toEqual([1]);
+
+    // Prepend to non-empty list
+    const n2 = list.prepend(2);
+    expect(list.size).toBe(2);
+    expect(list.head).toBe(n2);
+    expect(list.tail).toBe(n1);
+    expect(list.toArray()).toEqual([2, 1]);
+  });
+
+  test('InsertBefore & InsertAfter: insert node before/after a specific node', () => {
+    debugger;
+    const list = new LinkedList<number>();
+    const n2 = list.append(2);
+
+    // insertBefore
+    const n1 = n2.insertBefore(1);
+    expect(list.size).toBe(2);
+    expect(list.head).toBe(n1);
+    expect(list.toArray()).toEqual([1, 2]);
+
+    // insertAfter
+    const n3 = n2.insertAfter(3);
+    expect(list.size).toBe(3);
+    expect(list.tail).toBe(n3);
+    expect(list.toArray()).toEqual([1, 2, 3]);
+
+    // insert in between
+    const n1_5 = n2.insertBefore(15);
+    expect(list.size).toBe(4);
+    expect(list.toArray()).toEqual([1, 15, 2, 3]);
+  });
+
+  test('Clear: removes all nodes and resets state', () => {
+    const list = new LinkedList<number>();
+    list.append(1);
+    list.append(2);
+    expect(list.size).toBe(2);
+
+    list.clear();
+    expect(list.size).toBe(0);
+    expect(list.head).toBeNull();
+    expect(list.tail).toBeNull();
+    expect(list.toArray()).toEqual([]);
+  });
+
+  test('Double Linked List properties: head, tail, prev, next links', () => {
+    const list = new LinkedList<number>();
+    const n1 = list.append(1);
+    const n2 = list.append(2);
+    const n3 = list.append(3);
+
+    expect(list.head).toBe(n1);
+    expect(list.tail).toBe(n3);
+
+    expect(n1.prev).toBeNull();
+    expect(n1.next).toBe(n2);
+    expect(n2.prev).toBe(n1);
+    expect(n2.next).toBe(n3);
+    expect(n3.prev).toBe(n2);
+    expect(n3.next).toBeNull();
+  });
+
+  test('Safety: cannot insert before/after on a removed node', () => {
+    const list = new LinkedList<number>();
+    const n1 = list.append(1);
+    n1.removeSelf();
+
+    expect(() => n1.insertBefore(2)).toThrow('[LinkedNode]: can not find the owning list.');
+    expect(() => n1.insertAfter(3)).toThrow('[LinkedNode]: can not find the owning list.');
+  });
+
+  test('Safety: insertNodeBefore/After throws on non-matching owning list', () => {
+    const listA = new LinkedList<number>();
+    const listB = new LinkedList<number>();
+    const nodeA = listA.append(1);
+
+    expect(() => listB.insertNodeBefore(nodeA, 2)).toThrow('[LinkedNode]: the node does not belong to this list.');
+    expect(() => listB.insertNodeAfter(nodeA, 2)).toThrow('[LinkedNode]: the node does not belong to this list.');
   });
 });

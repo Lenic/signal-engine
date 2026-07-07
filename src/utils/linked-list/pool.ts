@@ -23,10 +23,8 @@ export class LinkedNodePool {
 
   public static release<T>(node: LinkedNode<T>): void {
     if (this.pool.length < this.maxPoolSize) {
-      node.clear();
       this.pool.push(node);
-    } else {
-      node.clear();
     }
+    node.clear();
   }
 }
