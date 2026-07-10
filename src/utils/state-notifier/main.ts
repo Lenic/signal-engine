@@ -1,24 +1,28 @@
-import { IStateNotifier } from './types';
-import { ILinkedList, ILinkedNode, LinkedList } from '../linked-list';
 import { Disposable } from '../disposable';
+import { EqualComparer, IEqualComparer } from '../equal-comparer';
 import { ErrorScope } from '../error-scope';
+import { ILinkedList, ILinkedNode, LinkedList } from '../linked-list';
+import { IStateNotifier } from './types';
 
 export class StateNotifier<T> extends Disposable implements IStateNotifier<T> {
-  private _value: T;
+  private _comparer: IEqualComparer<T>;
   private _subscribers: ILinkedList<(value: T) => void>;
 
-  constructor(value: T) {
+  constructor(value: T, comparer?: (x: T, y: T) => boolean) {
     super();
-    this._value = value;
+
+    this._comparer = new EqualComparer(comparer);
+    this._comparer.setValue(value);
+
     this._subscribers = new LinkedList<(value: T) => void>();
   }
 
   get value(): T {
-    return this._value;
+    return this._comparer.value;
   }
 
   notify(value: T): void {
-    this._value = value;
+    if (!this._comparer.setValue(value)) return;
 
     ErrorScope.current.run((context) => {
       let node = this._subscribers.head;
@@ -34,5 +38,14 @@ export class StateNotifier<T> extends Disposable implements IStateNotifier<T> {
 
     node.onRemoved = () => void (node = null);
     return () => node?.removeSelf();
+  }
+
+  dispose() {
+    if (this.isDisposed) return;
+
+    super.dispose();
+
+    this._comparer.dispose();
+    this._subscribers.clear();
   }
 }

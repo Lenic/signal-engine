@@ -11,7 +11,7 @@ export class ErrorScope implements IErrorScope {
     this.isExecuting = false;
   }
 
-  run(callback: (context: IErrorScopeContext) => void): void {
+  run(callback: (context: IErrorScopeContext) => void, finalize?: () => void): void {
     if (this.isExecuting) {
       throw new Error('[ErrorScope]: the run method cannot be nested.');
     }
@@ -32,13 +32,23 @@ export class ErrorScope implements IErrorScope {
     } catch (e) {
       this.list.push(e);
     } finally {
+      try {
+        finalize?.();
+      } catch (e) {
+        this.list.push(e);
+      }
+
       this.isExecuting = false;
       if (!this.list.length) return;
 
-      if (this.list.length === 1) {
-        throw this.list[0];
-      } else {
-        throw new AggregateError(this.list, '[ErrorScope]: multiple errors occurred.');
+      try {
+        if (this.list.length === 1) {
+          throw this.list[0];
+        } else {
+          throw new AggregateError(this.list, '[ErrorScope]: multiple errors occurred.');
+        }
+      } finally {
+        this.list = [];
       }
     }
   }

@@ -1,63 +1,23 @@
-import {
-  ISignalValue,
-  Observable,
-  ISignalValueOptions,
-  IObservable,
-  scheduler,
-  ETaskStatus,
-  SIGNAL_DEBUG_META,
-} from './core';
+import { globalScheduler, VersionLeader } from './core';
+import { EqualComparer } from './utils';
 
-function defaultComparator(a: any, b: any) {
-  return a === b;
-}
+export function signal<T>(initialValue: T) {
+  const comparer = new EqualComparer();
+  const leader = new VersionLeader((instance) => instance.isDirty, false);
 
-/**
- * Creates a signal with the given initial value.
- * @param initialValue The initial value of the signal.
- * @param options Options for creating the signal, including a comparator function.
- * @returns A signal with the given initial value.
- */
-export function signal<T>(initialValue: T, options?: ISignalValueOptions): ISignalValue<T> {
-  let value = initialValue;
-  const observable: IObservable = new Observable();
+  comparer.setValue(initialValue);
 
-  let comparator = options?.comparator ?? defaultComparator;
-  if (comparator === 'deep') {
-    const globalDeepComparator = scheduler.deepComparator;
-    if (!globalDeepComparator) {
-      throw new Error('[signal]: deep comparator not found');
-    }
-    comparator = globalDeepComparator;
-  } else if (comparator === 'shallow') {
-    comparator = defaultComparator;
-  }
-
-  const fn = comparator;
   function getter(...args: any[]): any {
     // No arguments: act as getter
     if (args.length === 0) {
-      observable.track();
-      return value;
+      globalScheduler.connectorManager?.track(leader);
+      return comparer.value;
     }
     // Arguments provided: act as setter
     const [nextValue] = args as [T];
-    if (!fn(value, nextValue)) {
-      const originalValue = value;
-      value = nextValue;
-      if (scheduler.status === ETaskStatus.IDLE) {
-        observable.trigger();
-      } else if (!observable.isInQueue) {
-        scheduler.dirtyObservables.add({ observable, originalValue, comparator: fn, valueOf: () => value });
-        observable.isInQueue = true;
-      }
+    if (comparer.setValue(nextValue)) {
+      leader.markDirty();
     }
   }
-  getter[SIGNAL_DEBUG_META] = {
-    type: 'signal',
-    get value() {
-      return value;
-    },
-  };
-  return getter as ISignalValue<T>;
+  return getter;
 }

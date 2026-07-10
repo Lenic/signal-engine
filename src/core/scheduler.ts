@@ -1,91 +1,42 @@
-import { LinkedList } from '../utils';
-import { ETaskStatus, type IScheduler, type ISubscriber, type IPendingObservable } from './types';
+import { ErrorScope, LinkedList } from '../utils';
+import { IConnectorManager, IScheduler } from './types';
 
-export const scheduler: IScheduler = {
-  deepComparator: null,
-  activeSubscriber: null,
-  status: ETaskStatus.IDLE,
-  dirtySubscribers: new LinkedList<ISubscriber>(),
-  dirtyObservables: new LinkedList<IPendingObservable>(),
+export const globalScheduler: IScheduler = {
+  isRunning: false,
+  pendingActionList: new LinkedList<() => void>(),
+  scheduledConnectorManagerList: new LinkedList<IConnectorManager>(),
+  batch: function (action: () => void): void {
+    const previous = this.isRunning;
+    this.isRunning = true;
 
-  batch(action: () => void): void {
-    const prev = this.status;
-    this.status = ETaskStatus.RUNNING;
-    try {
-      action();
-    } finally {
-      this.status = prev;
-      this.flushObservables();
-      this.flushSubscribers();
-    }
-  },
+    ErrorScope.current.run(
+      (context) => {
+        context.capture(action);
 
-  flushSubscribers(): void {
-    flush(this, 'dirtySubscribers', (value) => value.run());
-  },
+        let count = 0;
+        do {
+          if (count > 10) {
+            throw new Error('[IScheduler.batch]: Maximum iteration limit exceeded.');
+          }
 
-  flushObservables() {
-    flush(
-      this,
-      'dirtyObservables',
-      (value) => {
-        if (!value.comparator(value.originalValue, value.valueOf())) {
-          value.observable.trigger();
-        }
+          let n1 = this.pendingActionList.head;
+          while (n1) {
+            context.capture(n1.value);
+
+            n1.removeSelf();
+            n1 = this.pendingActionList.head;
+          }
+
+          let n2 = this.scheduledConnectorManagerList.head;
+          while (n2) {
+            context.capture(() => n2!.value.run());
+
+            n2.removeSelf();
+            n2 = this.scheduledConnectorManagerList.head;
+          }
+        } while (this.pendingActionList.size > 0 || this.scheduledConnectorManagerList.size > 0);
       },
-      (value) => void (value.observable.isInQueue = false),
+      () => void (this.isRunning = previous),
     );
   },
 };
-
-function flush(
-  scheduler: IScheduler,
-  listKey: 'dirtyObservables',
-  action: (node: IPendingObservable) => void,
-  finallyFn?: (node: IPendingObservable) => void,
-): void;
-function flush(
-  scheduler: IScheduler,
-  listKey: 'dirtySubscribers',
-  action: (node: ISubscriber) => void,
-  finallyFn?: (node: ISubscriber) => void,
-): void;
-function flush(scheduler: IScheduler, listKey: string, action: (node: any) => void, finallyFn?: (node: any) => void) {
-  const caughtErrors: any[] = [];
-  while (true) {
-    if (scheduler.status !== ETaskStatus.IDLE) return;
-
-    scheduler.status = listKey === 'dirtyObservables' ? ETaskStatus.UPDATING : ETaskStatus.RUNNING;
-    try {
-      let node = scheduler[listKey].head;
-      if (!node) break;
-
-      while (node) {
-        try {
-          action(node.value);
-        } catch (e) {
-          caughtErrors.push(e);
-        } finally {
-          finallyFn?.(node.value);
-        }
-
-        const next = node.next;
-        node.removeSelf();
-        node = next;
-      }
-    } finally {
-      scheduler.status = ETaskStatus.IDLE;
-    }
-  }
-
-  if (caughtErrors.length) {
-    if (caughtErrors.length === 1) {
-      throw caughtErrors[0];
-    } else {
-      throw new AggregateError(
-        caughtErrors,
-        `Multiple errors occurred during ${listKey === 'dirtyObservables' ? 'trigger' : 'effect'} execution`,
-      );
-    }
-  }
-}

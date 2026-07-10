@@ -1,151 +1,55 @@
-import { IDisposable, ILinkedList, ILinkedNode } from '../utils';
-import { SIGNAL_DEBUG_META } from './constants';
+import { IDisposable, ILinkedList } from '../utils';
 
-/**
- * Represents a connection between a subscriber and an observable.
- */
-export interface IConnector {
-  /** The version of the subscriber when this connection was last validated. */
-  lastVersion: number;
-  /** The observable being tracked. */
-  observable: IObservable;
-  /** The node in the observable's subscriber list representing this subscription. */
-  subscriberNode: ILinkedNode<ISubscriber>;
+export interface IDirtyMarkable extends IDisposable {
+  readonly isDirty: boolean;
+
+  markDirty(): void;
+  onDirty(callback: () => void): () => void;
 }
 
-/**
- * Represents an entity that can subscribe to observables and be notified of changes.
- */
-export interface ISubscriber extends IDisposable {
-  /** The current version of the subscriber, incremented on each run. */
+export interface IVersioned extends IDisposable {
+  readonly version: number;
+
+  onVersionChanged(callback: (version: number) => void): () => void;
+}
+
+export interface ISchedulable extends IDisposable {
+  readonly isScheduled: boolean;
+
+  markScheduled(): void;
+  clearScheduled(): void;
+  onScheduleChange(listener: (scheduled: boolean) => void): () => void;
+}
+
+export interface IVersionFollower extends IDirtyMarkable, IDisposable {
+  clearDirty(): void;
+}
+
+export interface IVersionLeader extends IDirtyMarkable, IVersioned, IDisposable {
+  confirm(): number;
+  appendFollower(follower: IVersionFollower): () => void;
+}
+
+export interface ISnapshot<T> {
+  instance: T;
   version: number;
-  /** The children subscribers of this subscriber. */
-  children: ILinkedList<ISubscriber> | null;
-  /** The list of observables this subscriber currently depends on. */
-  dependencies: ILinkedList<IConnector>;
-  /** The current connector being processed during the tracking phase. */
-  currentConnector: ILinkedNode<IConnector> | null;
-
-  /**
-   * Executes the subscriber's logic, tracking any observables accessed during execution.
-   *
-   * @param customAction Optional custom action to run instead of the default action.
-   */
-  run(customAction?: () => void): void;
-  /**
-   * Schedules the subscriber to be processed by the scheduler.
-   */
-  scheduleUpdate(): void;
 }
 
-/**
- * Represents an entity that can be observed and notifies its subscribers when it changes.
- */
-export interface IObservable {
-  /**
-   * Indicates whether the observable is currently in the queue to be processed.
-   * This is used to prevent the observable from being added to the queue multiple times.
-   */
-  isInQueue: boolean;
-  /** The list of subscribers currently observing this observable. */
-  subscribers: ILinkedList<ISubscriber>;
-
-  /**
-   * Registers the active subscriber as a dependency of this observable.
-   */
-  track(): void;
-
-  /**
-   * Notifies all subscribers that the observable's value has changed.
-   */
-  trigger(): void;
+export interface IConnector {
+  snapshot: ISnapshot<IVersionLeader>;
+  unsubscribe: () => void;
 }
 
-export const ETaskStatus = {
-  IDLE: 'idle',
-  UPDATING: 'updating',
-  RUNNING: 'running',
-} as const;
-export type ETaskStatus = (typeof ETaskStatus)[keyof typeof ETaskStatus];
-
-export interface IPendingObservable {
-  observable: IObservable;
-  originalValue: unknown;
-  comparator(a: unknown, b: unknown): boolean;
-  valueOf(): unknown;
+export interface IConnectorManager {
+  run(): void;
+  track(provider: IVersionLeader): void;
 }
 
 export interface IScheduler {
-  deepComparator: null | ((a: unknown, b: unknown) => boolean);
-  /** The status of the scheduler. */
-  status: ETaskStatus;
-  /** The currently active subscriber being processed. */
-  activeSubscriber: ISubscriber | null;
-  /** The list of subscribers that are queued to be processed. */
-  dirtySubscribers: ILinkedList<ISubscriber>;
-  /** The list of observables that are queued to be processed. */
-  dirtyObservables: ILinkedList<IPendingObservable>;
+  isRunning: boolean;
+  connectorManager?: IConnectorManager;
+  pendingActionList: ILinkedList<() => void>;
+  scheduledConnectorManagerList: ILinkedList<IConnectorManager>;
 
-  /**
-   * Runs a task in the scheduler's context.
-   * @param action The task to run.
-   */
   batch(action: () => void): void;
-  /**
-   * Flushes the dirty subscribers.
-   */
-  flushSubscribers(): void;
-  /**
-   * Flushes the dirty observables.
-   */
-  flushObservables(): void;
-}
-
-/**
- * Meta data for signal debugging.
- */
-export interface ISignalMeta extends Record<string, unknown> {
-  /**
-   * Type of the signal.
-   */
-  readonly type: string;
-}
-
-/**
- * Represents a read-only signal value that can be read.
- */
-export interface IReadonlySignalValue<T> {
-  /**
-   * Gets the meta data for debugging.
-   */
-  [SIGNAL_DEBUG_META]: ISignalMeta;
-  /**
-   * Gets the current value of the signal.
-   */
-  (): T;
-}
-
-/**
- * Options for creating or updating a signal value.
- */
-export interface ISignalValueOptions {
-  /**
-   * The comparator function to use for comparing values.
-   *
-   * - `'deep'`: Deep comparison by the global default comparator.
-   * - `'shallow'`: Shallow comparison by `===`.
-   * - `(a: T, b: T) => boolean`: Custom comparator.
-   */
-  comparator?: 'deep' | 'shallow' | ((a: unknown, b: unknown) => boolean);
-}
-
-/**
- * Represents a writable signal value that can be read and updated.
- */
-export interface ISignalValue<T> extends IReadonlySignalValue<T> {
-  /**
-   * Sets a new value for the signal.
-   * @param value The new value to set.
-   */
-  (value: T, options?: ISignalValueOptions): void;
 }

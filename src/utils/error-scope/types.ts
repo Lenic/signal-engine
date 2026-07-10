@@ -4,5 +4,5 @@ export interface IErrorScopeContext {
 }
 
 export interface IErrorScope {
-  run(callback: (context: IErrorScopeContext) => void): void;
+  run(callback: (context: IErrorScopeContext) => void, finalize?: () => void): void;
 }

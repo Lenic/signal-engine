@@ -1,52 +1,35 @@
-import { IObservable, IReadonlySignalValue, ISubscriber, Observable, SIGNAL_DEBUG_META, Subscriber } from './core';
-import { Disposable, IDisposable } from './utils';
+import { ConnectorManager, globalScheduler, IVersionLeader, VersionFollower, VersionLeader } from './core';
+import { EqualComparer } from './utils';
 
-/**
- * Creates a computed signal that lazily evaluates and memoizes the result of the provided function.
- *
- * The function is evaluated only when the signal is read and its dependencies have changed.
- * This ensures that unnecessary re-evaluations are avoided, making it highly efficient.
- *
- * @param fn The function to compute the signal's value.
- * @returns A read-only signal representing the memoized value.
- */
-export function memo<T>(fn: () => T): IReadonlySignalValue<T> & IDisposable {
-  let value: T;
-  let isDirty = true;
+export function memo<T>(fn: () => T) {
+  let leader: IVersionLeader;
+  const comparer = new EqualComparer<T>();
 
-  const observable: IObservable = new Observable();
-  const subscriber: ISubscriber = new Subscriber(() => {
-    if (!isDirty) {
-      isDirty = true;
-      observable.trigger();
+  const follower = new VersionFollower(true);
+  follower.onDirty(() => leader.markDirty());
+
+  const manager = new ConnectorManager(follower, () => {
+    const nextValue = fn();
+    if (comparer.setValue(nextValue)) {
+      follower.clearDirty();
     }
   });
 
-  function getter(): T {
-    if (isDirty) {
-      subscriber.run(() => void (value = fn()));
-      isDirty = false;
+  leader = new VersionLeader((instance) => {
+    if (instance.isDirty) {
+      manager.run();
+      if (instance.isDirty) {
+        follower.clearDirty();
+        return false;
+      }
+      return true;
     }
+    return false;
+  }, false);
 
-    observable.track();
-    return value;
+  function getter(): T {
+    globalScheduler.connectorManager?.track(leader);
+    return comparer.value;
   }
-
-  const disposable = new Disposable();
-  disposable.disposeWithMe(subscriber);
-
-  const result = getter as IReadonlySignalValue<T> & IDisposable;
-  result.dispose = () => void disposable.dispose();
-  result.disposeWithMe = (fn) => void disposable.disposeWithMe(fn);
-  result[SIGNAL_DEBUG_META] = {
-    type: 'memo',
-    get dirty() {
-      return isDirty;
-    },
-    get value() {
-      return value;
-    },
-  };
-
-  return result;
+  return getter;
 }
