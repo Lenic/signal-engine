@@ -1,21 +1,33 @@
+import { ILinkedList, LinkedList } from '../linked-list';
 import { IErrorScope, IErrorScopeContext } from './types';
+
+const store: ILinkedList<IErrorScope> = new LinkedList<IErrorScope>();
+
+function releaseScopeInstance(instance: IErrorScope) {
+  if (store.size < 5) {
+    store.append(instance);
+  }
+}
 
 export class ErrorScope implements IErrorScope {
   private list: unknown[];
-  private isExecuting: boolean;
 
-  static current: IErrorScope = new ErrorScope();
+  static getInstance(): IErrorScope {
+    let node = store.head;
+    if (!node) {
+      return new ErrorScope();
+    }
+
+    const instance = node.value;
+    node.removeSelf();
+    return instance;
+  }
 
   private constructor() {
     this.list = [];
-    this.isExecuting = false;
   }
 
   run(callback: (context: IErrorScopeContext) => void, finalize?: () => void): void {
-    if (this.isExecuting) {
-      throw new Error('[ErrorScope]: the run method cannot be nested.');
-    }
-
     const context: IErrorScopeContext = {
       push: (error: any) => this.list.push(error),
       capture: (action) => {
@@ -27,7 +39,6 @@ export class ErrorScope implements IErrorScope {
       },
     };
     try {
-      this.isExecuting = true;
       callback(context);
     } catch (e) {
       this.list.push(e);
@@ -38,7 +49,6 @@ export class ErrorScope implements IErrorScope {
         this.list.push(e);
       }
 
-      this.isExecuting = false;
       if (!this.list.length) return;
 
       try {
@@ -49,6 +59,7 @@ export class ErrorScope implements IErrorScope {
         }
       } finally {
         this.list = [];
+        releaseScopeInstance(this);
       }
     }
   }

@@ -17,7 +17,6 @@ export class VersionLeader extends DirtyMarkable implements IVersionLeader {
 
     this.disposeWithMe(
       this.onDirty(() => {
-        debugger;
         let node = this._followers.head;
         while (node) {
           node.value.markDirty();

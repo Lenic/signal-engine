@@ -1,24 +1,25 @@
-import { ErrorScope, LinkedList } from '../utils';
+import { ErrorScope, IErrorScopeContext, LinkedList } from '../utils';
 import { IConnectorManager, IScheduler } from './types';
+
+let iterativeLevel = 0;
 
 export const globalScheduler: IScheduler = {
   isRunning: false,
   pendingActionList: new LinkedList<() => void>(),
   scheduledConnectorManagerList: new LinkedList<IConnectorManager>(),
-  batch: function (action: () => void): void {
+  batch(action: (context: IErrorScopeContext) => void, finalize?: () => void): void {
     const previous = this.isRunning;
     this.isRunning = true;
 
-    ErrorScope.current.run(
+    ErrorScope.getInstance().run(
       (context) => {
-        context.capture(action);
+        iterativeLevel += 1;
 
-        let count = 0;
+        context.capture(() => action(context));
+
+        if (iterativeLevel !== 1) return;
+
         do {
-          if (count > 10) {
-            throw new Error('[IScheduler.batch]: Maximum iteration limit exceeded.');
-          }
-
           let n1 = this.pendingActionList.head;
           while (n1) {
             context.capture(n1.value);
@@ -36,7 +37,12 @@ export const globalScheduler: IScheduler = {
           }
         } while (this.pendingActionList.size > 0 || this.scheduledConnectorManagerList.size > 0);
       },
-      () => void (this.isRunning = previous),
+      () => {
+        iterativeLevel -= 1;
+        this.isRunning = previous;
+
+        finalize?.();
+      },
     );
   },
 };

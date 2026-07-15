@@ -44,7 +44,6 @@ describe('signal', () => {
 
     // 1. Mutate internal property, keep same reference
     initialObj.value = 2;
-    debugger;
     s(initialObj);
     // Reference check (value !== nextValue) means this shouldn't trigger update
     expect(runCount).toBe(1);

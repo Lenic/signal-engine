@@ -1,4 +1,4 @@
-import { IDisposable, ILinkedList } from '../utils';
+import { IDisposable, IErrorScopeContext, ILinkedList } from '../utils';
 
 export interface IDirtyMarkable extends IDisposable {
   readonly isDirty: boolean;
@@ -40,7 +40,7 @@ export interface IConnector {
   unsubscribe: () => void;
 }
 
-export interface IConnectorManager {
+export interface IConnectorManager extends IDisposable {
   run(): void;
   track(provider: IVersionLeader): void;
 }
@@ -51,5 +51,5 @@ export interface IScheduler {
   pendingActionList: ILinkedList<() => void>;
   scheduledConnectorManagerList: ILinkedList<IConnectorManager>;
 
-  batch(action: () => void): void;
+  batch(action: (context: IErrorScopeContext) => void, finalize?: () => void): void;
 }

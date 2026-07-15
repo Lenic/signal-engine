@@ -14,7 +14,6 @@ describe('LinkedList (With Global Node Pooling)', () => {
   });
 
   test('Node self-removal: remove via ILinkedNode.removeSelf()', () => {
-    debugger;
     const list = new LinkedList<string>();
     const n1 = list.append('a');
     const n2 = list.append('b');
@@ -116,7 +115,6 @@ describe('LinkedList (With Global Node Pooling)', () => {
   });
 
   test('InsertBefore & InsertAfter: insert node before/after a specific node', () => {
-    debugger;
     const list = new LinkedList<number>();
     const n2 = list.append(2);
 

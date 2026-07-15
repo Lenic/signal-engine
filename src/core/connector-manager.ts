@@ -1,8 +1,8 @@
-import { ErrorScope, ILinkedList, ILinkedNode, LinkedList } from '../utils';
+import { Disposable, ILinkedList, ILinkedNode, LinkedList } from '../utils';
 import { globalScheduler } from './scheduler';
 import { IConnector, IConnectorManager, IVersionFollower, IVersionLeader } from './types';
 
-export class ConnectorManager implements IConnectorManager {
+export class ConnectorManager extends Disposable implements IConnectorManager {
   private _isInitialized: boolean;
   private _follower: IVersionFollower;
   private _list: ILinkedList<IConnector>;
@@ -12,6 +12,8 @@ export class ConnectorManager implements IConnectorManager {
   private _action: () => void;
 
   constructor(follower: IVersionFollower, action: () => void) {
+    super();
+
     this._current = null;
     this._isExecuting = false;
     this._isInitialized = false;
@@ -22,15 +24,19 @@ export class ConnectorManager implements IConnectorManager {
   }
 
   run(): void {
+    this.checkDisposed();
+
     if (this._isExecuting) {
       throw new Error('[ConnectorManager]: can not run iteratively.');
     }
 
-    const previousIsRunning = globalScheduler.isRunning;
+    const previousRunning = globalScheduler.isRunning;
     const previousManager = globalScheduler.connectorManager;
-    globalScheduler.connectorManager = this;
+
     globalScheduler.isRunning = true;
-    ErrorScope.current.run(
+    globalScheduler.connectorManager = this;
+
+    globalScheduler.batch(
       (context) => {
         if (!this.shouldRecompute()) return;
         this._isInitialized = true;
@@ -45,13 +51,17 @@ export class ConnectorManager implements IConnectorManager {
         }
       },
       () => {
+        this._isExecuting = false;
+
+        globalScheduler.isRunning = previousRunning;
         globalScheduler.connectorManager = previousManager;
-        globalScheduler.isRunning = previousIsRunning;
       },
     );
   }
 
   track(provider: IVersionLeader): void {
+    this.checkDisposed();
+
     try {
       if (!this._current) {
         this._current = this._list.append({
@@ -75,6 +85,22 @@ export class ConnectorManager implements IConnectorManager {
     } finally {
       this._current = this._current?.next ?? null;
     }
+  }
+
+  dispose() {
+    if (this.isDisposed) return;
+
+    super.dispose();
+
+    this._current = null;
+    this._isExecuting = false;
+    this._isInitialized = false;
+
+    this._action = undefined as unknown as () => void;
+    this._follower = undefined as unknown as IVersionFollower;
+
+    this._list.clear();
+    this._list = undefined as unknown as ILinkedList<IConnector>;
   }
 
   private shouldRecompute() {
