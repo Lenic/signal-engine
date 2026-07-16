@@ -1,12 +1,13 @@
 import { globalScheduler, VersionLeader } from './core';
+import { ISignalOptions } from './types';
 import { EqualComparer } from './utils';
 
-export function signal<T>(initialValue: T, name?: string) {
-  const comparer = new EqualComparer();
+export function signal<T>(initialValue: T, options?: ISignalOptions<T>) {
+  const comparer = new EqualComparer(options?.comparer);
   const leader = new VersionLeader({
     isDirty: false,
     confirm: (instance) => instance.isDirty,
-    name: name ? `signal-leader-${name}` : undefined,
+    name: options?.name ? `signal-leader-${options?.name}` : undefined,
   });
 
   comparer.setValue(initialValue);
