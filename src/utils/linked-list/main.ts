@@ -57,16 +57,33 @@ export class LinkedList<T> implements ILinkedList<T>, ILinkedListInternalActions
     LinkedNodePool.release(internalNode);
   }
 
-  clear(): void {
+  clear(callback?: (item: T, index: number) => void): void {
+    let index = 0;
     let current = this._head;
+
     while (current) {
-      this.remove(current);
-      current = current.next;
+      callback?.(current.value, index);
+
+      index += 1;
+      current.removeSelf();
+      current = this._head;
     }
 
     this._size = 0;
     this._head = null;
     this._tail = null;
+  }
+
+  forEach(callback: (item: T, index: number) => void): void {
+    let index = 0;
+    let current = this._head;
+
+    while (current) {
+      callback(current.value, index);
+
+      index += 1;
+      current = current.next;
+    }
   }
 
   insertNodeBefore(node: ILinkedNode<T> | null, value: T): ILinkedNode<T> {

@@ -1,5 +1,9 @@
 import { IDisposable, IErrorScopeContext, ILinkedList } from '../utils';
 
+export interface IObjectOptions {
+  name?: string;
+}
+
 export interface IDirtyMarkable extends IDisposable {
   readonly isDirty: boolean;
 
@@ -21,8 +25,20 @@ export interface ISchedulable extends IDisposable {
   onScheduleChange(listener: (scheduled: boolean) => void): () => void;
 }
 
+export interface IVersionFollowerOptions extends IObjectOptions {
+  /**
+   * @default `true`
+   */
+  isDirty?: boolean;
+}
+
 export interface IVersionFollower extends IDirtyMarkable, IDisposable {
   clearDirty(): void;
+}
+
+export interface IVersionLeaderOptions extends IObjectOptions {
+  isDirty: boolean;
+  confirm: (leader: IVersionLeader) => boolean;
 }
 
 export interface IVersionLeader extends IDirtyMarkable, IVersioned, IDisposable {

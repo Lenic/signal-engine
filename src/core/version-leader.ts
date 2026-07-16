@@ -1,29 +1,21 @@
 import { ILinkedList, ILinkedNode, IStateNotifier, LinkedList, StateNotifier } from '../utils';
 import { DirtyMarkable } from './dirty-markable';
-import { IVersionFollower, IVersionLeader } from './types';
+import { IVersionFollower, IVersionLeader, IVersionLeaderOptions } from './types';
 
 export class VersionLeader extends DirtyMarkable implements IVersionLeader {
   private _versionConfirmer: (leader: IVersionLeader) => boolean;
   private _versionNotifier: IStateNotifier<number>;
   private _followers: ILinkedList<IVersionFollower>;
 
-  constructor(versionConfirmer: (leader: IVersionLeader) => boolean, isDirty: boolean) {
-    super(isDirty);
+  constructor(options: IVersionLeaderOptions) {
+    super(options.isDirty);
 
-    this._versionConfirmer = versionConfirmer;
+    this._versionConfirmer = options.confirm;
 
     this._versionNotifier = new StateNotifier(1);
     this._followers = new LinkedList<IVersionFollower>();
 
-    this.disposeWithMe(
-      this.onDirty(() => {
-        let node = this._followers.head;
-        while (node) {
-          node.value.markDirty();
-          node = node.next;
-        }
-      }),
-    );
+    this.disposeWithMe(this.onDirty(() => this._followers.forEach((v) => v.markDirty())));
   }
 
   get version(): number {

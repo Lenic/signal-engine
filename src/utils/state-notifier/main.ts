@@ -24,13 +24,7 @@ export class StateNotifier<T> extends Disposable implements IStateNotifier<T> {
   notify(value: T): void {
     if (!this._comparer.setValue(value)) return;
 
-    ErrorScope.getInstance().run((context) => {
-      let node = this._subscribers.head;
-      while (node) {
-        context.capture(() => node!.value(value));
-        node = node.next;
-      }
-    });
+    ErrorScope.getInstance().run((context) => this._subscribers.forEach((v) => context.capture(() => v(value))));
   }
 
   subscribe(listener: (value: T) => void): () => void {

@@ -59,28 +59,28 @@ export class ConnectorManager extends Disposable implements IConnectorManager {
     );
   }
 
-  track(provider: IVersionLeader): void {
+  track(leader: IVersionLeader): void {
     this.checkDisposed();
 
     try {
       if (!this._current) {
         this._current = this._list.append({
-          snapshot: { instance: provider, version: provider.version },
-          unsubscribe: provider.appendFollower(this._follower),
+          snapshot: { instance: leader, version: leader.confirm() },
+          unsubscribe: leader.appendFollower(this._follower),
         });
         return;
       }
 
       const { snapshot, unsubscribe } = this._current.value;
-      if (snapshot.instance === provider) {
-        snapshot.version = provider.version;
+      if (snapshot.instance === leader) {
+        snapshot.version = leader.confirm();
         return;
       }
 
       unsubscribe();
       this._current.value = {
-        snapshot: { instance: provider, version: provider.version },
-        unsubscribe: provider.appendFollower(this._follower),
+        snapshot: { instance: leader, version: leader.confirm() },
+        unsubscribe: leader.appendFollower(this._follower),
       };
     } finally {
       this._current = this._current?.next ?? null;
@@ -99,6 +99,7 @@ export class ConnectorManager extends Disposable implements IConnectorManager {
     this._action = undefined as unknown as () => void;
     this._follower = undefined as unknown as IVersionFollower;
 
+    this._list.forEach((v) => v.unsubscribe());
     this._list.clear();
     this._list = undefined as unknown as ILinkedList<IConnector>;
   }
@@ -110,6 +111,7 @@ export class ConnectorManager extends Disposable implements IConnectorManager {
     while (node) {
       const currentVersion = node.value.snapshot.instance.confirm();
       if (currentVersion !== node.value.snapshot.version) return true;
+      node = node.next;
     }
     return false;
   }

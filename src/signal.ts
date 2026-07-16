@@ -1,9 +1,13 @@
 import { globalScheduler, VersionLeader } from './core';
 import { EqualComparer } from './utils';
 
-export function signal<T>(initialValue: T) {
+export function signal<T>(initialValue: T, name?: string) {
   const comparer = new EqualComparer();
-  const leader = new VersionLeader((instance) => instance.isDirty, false);
+  const leader = new VersionLeader({
+    isDirty: false,
+    confirm: (instance) => instance.isDirty,
+    name: name ? `signal-leader-${name}` : undefined,
+  });
 
   comparer.setValue(initialValue);
 
@@ -19,5 +23,8 @@ export function signal<T>(initialValue: T) {
       leader.markDirty();
     }
   }
+
+  getter.comparer = comparer;
+  getter.leader = leader;
   return getter;
 }

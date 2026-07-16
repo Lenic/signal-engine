@@ -87,8 +87,17 @@ export interface ILinkedList<T> {
 
   /**
    * Removes all nodes from the linked list.
+   * @param callback Optional callback function to be executed for each removed node.
+   *                 The callback receives the removed node and its index in the list.
    */
-  clear(): void;
+  clear(callback?: (item: T, index: number) => void): void;
+
+  /**
+   * Executes a callback function for each node in the linked list.
+   * @param callback The callback function to execute for each node.
+   *                 The callback receives the node's value and index.
+   */
+  forEach(callback: (item: T, index: number) => void): void;
 }
 
 /**

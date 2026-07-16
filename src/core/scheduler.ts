@@ -20,21 +20,8 @@ export const globalScheduler: IScheduler = {
         if (iterativeLevel !== 1) return;
 
         do {
-          let n1 = this.pendingActionList.head;
-          while (n1) {
-            context.capture(n1.value);
-
-            n1.removeSelf();
-            n1 = this.pendingActionList.head;
-          }
-
-          let n2 = this.scheduledConnectorManagerList.head;
-          while (n2) {
-            context.capture(() => n2!.value.run());
-
-            n2.removeSelf();
-            n2 = this.scheduledConnectorManagerList.head;
-          }
+          this.pendingActionList.clear((v) => context.capture(v));
+          this.scheduledConnectorManagerList.clear((v) => context.capture(() => v.run()));
         } while (this.pendingActionList.size > 0 || this.scheduledConnectorManagerList.size > 0);
       },
       () => {

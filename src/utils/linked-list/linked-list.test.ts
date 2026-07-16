@@ -229,4 +229,62 @@ describe('LinkedList (With Global Node Pooling)', () => {
     expect(node3.onRemoved).toBeNull();
     expect(node3.value).toBeUndefined();
   });
+
+  test('forEach: iterates over all elements and receives values and indices', () => {
+    const list = new LinkedList<string>();
+    const values: string[] = [];
+    const indices: number[] = [];
+
+    // Empty list
+    list.forEach((val, idx) => {
+      values.push(val);
+      indices.push(idx);
+    });
+    expect(values).toEqual([]);
+    expect(indices).toEqual([]);
+
+    // Elements present
+    list.append('a');
+    list.append('b');
+    list.append('c');
+
+    list.forEach((val, idx) => {
+      values.push(val);
+      indices.push(idx);
+    });
+    expect(values).toEqual(['a', 'b', 'c']);
+    expect(indices).toEqual([0, 1, 2]);
+  });
+
+  test('Clear with callback: executes callback for all nodes during clear', () => {
+    const list = new LinkedList<number>();
+    const clearedItems: { item: number; index: number }[] = [];
+
+    // Empty list
+    list.clear((item, index) => {
+      clearedItems.push({ item, index });
+    });
+    expect(clearedItems).toEqual([]);
+    expect(list.size).toBe(0);
+
+    // Multiple elements (Verifying the bug fix: all elements are processed)
+    list.append(100);
+    list.append(200);
+    list.append(300);
+
+    list.clear((item, index) => {
+      clearedItems.push({ item, index });
+    });
+
+    expect(clearedItems).toEqual([
+      { item: 100, index: 0 },
+      { item: 200, index: 1 },
+      { item: 300, index: 2 }
+    ]);
+    expect(list.size).toBe(0);
+    expect(list.head).toBeNull();
+    expect(list.tail).toBeNull();
+    expect(list.toArray()).toEqual([]);
+  });
 });
+
