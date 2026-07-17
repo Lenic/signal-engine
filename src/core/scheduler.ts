@@ -18,10 +18,7 @@ export const globalScheduler: IScheduler = {
 
         if (iterativeLevel !== 1) return;
 
-        do {
-          debugger;
-          this.scheduledConnectorManagerList.clear((v) => context.capture(() => v.run()));
-        } while (this.scheduledConnectorManagerList.size > 0);
+        this.scheduledConnectorManagerList.clear((v) => context.capture(() => v.run()));
       },
       () => {
         iterativeLevel -= 1;

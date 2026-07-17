@@ -1,7 +1,7 @@
 import { ConnectorManager, globalScheduler, Schedulable, VersionFollower } from './core';
 
 export function effect(action: () => void, name?: string) {
-  const task = new Schedulable();
+  const task = new Schedulable(name ? `effect-schedulable-${name}` : undefined);
   const follower = new VersionFollower({ name: name ? `effect-follower-${name}` : undefined });
   const manager = new ConnectorManager(
     follower,

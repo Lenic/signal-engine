@@ -19,6 +19,7 @@ export interface IVersioned extends IDisposable {
 }
 
 export interface ISchedulable extends IDisposable {
+  readonly name?: string;
   readonly isScheduled: boolean;
 
   markScheduled(): void;
