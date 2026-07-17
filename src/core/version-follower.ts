@@ -3,7 +3,7 @@ import { IVersionFollower, IVersionFollowerOptions } from './types';
 
 export class VersionFollower extends DirtyMarkable implements IVersionFollower {
   constructor(options?: IVersionFollowerOptions) {
-    super(options?.isDirty ?? true);
+    super(options?.isDirty ?? true, options?.name);
   }
 
   clearDirty(): void {

@@ -5,7 +5,6 @@ let iterativeLevel = 0;
 
 export const globalScheduler: IScheduler = {
   isRunning: false,
-  pendingActionList: new LinkedList<() => void>(),
   scheduledConnectorManagerList: new LinkedList<IConnectorManager>(),
   batch(action: (context: IErrorScopeContext) => void, finalize?: () => void): void {
     const previous = this.isRunning;
@@ -20,9 +19,9 @@ export const globalScheduler: IScheduler = {
         if (iterativeLevel !== 1) return;
 
         do {
-          this.pendingActionList.clear((v) => context.capture(v));
+          debugger;
           this.scheduledConnectorManagerList.clear((v) => context.capture(() => v.run()));
-        } while (this.pendingActionList.size > 0 || this.scheduledConnectorManagerList.size > 0);
+        } while (this.scheduledConnectorManagerList.size > 0);
       },
       () => {
         iterativeLevel -= 1;

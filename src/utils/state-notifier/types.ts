@@ -1,11 +1,17 @@
 import type { IDisposable } from '../disposable';
 
+export interface IStateNotifierOptions<T> {
+  name?: string;
+  comparer?: (x: T, y: T) => boolean;
+}
+
 /**
  * Interface for a state notifier
  *
  * @template T The type of the value
  */
 export interface IStateNotifier<T> extends IDisposable {
+  readonly name?: string;
   /**
    * The current value of the notifier
    */

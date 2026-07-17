@@ -3,11 +3,15 @@ import { ConnectorManager, globalScheduler, Schedulable, VersionFollower } from 
 export function effect(action: () => void, name?: string) {
   const task = new Schedulable();
   const follower = new VersionFollower({ name: name ? `effect-follower-${name}` : undefined });
-  const manager = new ConnectorManager(follower, () => {
-    task.clearScheduled();
+  const manager = new ConnectorManager(
+    follower,
+    () => {
+      task.clearScheduled();
 
-    action();
-  });
+      action();
+    },
+    name ? `effect-connector-manager-${name}` : undefined,
+  );
 
   function dispose() {
     task.dispose();

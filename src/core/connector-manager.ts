@@ -2,28 +2,34 @@ import { Disposable, ILinkedList, ILinkedNode, LinkedList } from '../utils';
 import { globalScheduler } from './scheduler';
 import { IConnector, IConnectorManager, IVersionFollower, IVersionLeader } from './types';
 
-export class ConnectorManager extends Disposable implements IConnectorManager {
+export class ConnectorManager<T = void> extends Disposable implements IConnectorManager<T> {
+  private _name?: string;
   private _isInitialized: boolean;
   private _follower: IVersionFollower;
   private _list: ILinkedList<IConnector>;
 
   private _isExecuting: boolean;
   private _current: ILinkedNode<IConnector> | null;
-  private _action: () => void;
+  private _action: () => T;
 
-  constructor(follower: IVersionFollower, action: () => void) {
+  constructor(follower: IVersionFollower, action: () => T, name?: string) {
     super();
 
     this._current = null;
     this._isExecuting = false;
     this._isInitialized = false;
 
+    this._name = name;
     this._action = action;
     this._follower = follower;
     this._list = new LinkedList<IConnector>();
   }
 
-  run(): void {
+  get name(): string | undefined {
+    return this._name;
+  }
+
+  run(): T {
     this.checkDisposed();
 
     if (this._isExecuting) {
@@ -36,13 +42,14 @@ export class ConnectorManager extends Disposable implements IConnectorManager {
     globalScheduler.isRunning = true;
     globalScheduler.connectorManager = this;
 
+    let result: T;
     globalScheduler.batch(
       (context) => {
         if (!this.shouldRecompute()) return;
         this._isInitialized = true;
 
         this._current = this._list.head;
-        context.capture(() => this._action());
+        context.capture(() => void (result = this._action()));
 
         if (this._current) {
           this._current.value.unsubscribe();
@@ -57,6 +64,7 @@ export class ConnectorManager extends Disposable implements IConnectorManager {
         globalScheduler.connectorManager = previousManager;
       },
     );
+    return result!;
   }
 
   track(leader: IVersionLeader): void {
@@ -87,6 +95,11 @@ export class ConnectorManager extends Disposable implements IConnectorManager {
     }
   }
 
+  disconnect(): void {
+    this._list.forEach((v) => v.unsubscribe());
+    this._list.clear();
+  }
+
   dispose() {
     if (this.isDisposed) return;
 
@@ -96,11 +109,10 @@ export class ConnectorManager extends Disposable implements IConnectorManager {
     this._isExecuting = false;
     this._isInitialized = false;
 
-    this._action = undefined as unknown as () => void;
+    this._action = undefined as unknown as () => T;
     this._follower = undefined as unknown as IVersionFollower;
 
-    this._list.forEach((v) => v.unsubscribe());
-    this._list.clear();
+    this.disconnect();
     this._list = undefined as unknown as ILinkedList<IConnector>;
   }
 

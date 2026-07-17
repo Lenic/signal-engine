@@ -5,6 +5,7 @@ export interface IObjectOptions {
 }
 
 export interface IDirtyMarkable extends IDisposable {
+  readonly name?: string;
   readonly isDirty: boolean;
 
   markDirty(): void;
@@ -56,15 +57,17 @@ export interface IConnector {
   unsubscribe: () => void;
 }
 
-export interface IConnectorManager extends IDisposable {
-  run(): void;
+export interface IConnectorManager<T = void> extends IDisposable {
+  readonly name?: string;
+
+  run(): T;
+  disconnect(): void;
   track(provider: IVersionLeader): void;
 }
 
 export interface IScheduler {
   isRunning: boolean;
   connectorManager?: IConnectorManager;
-  pendingActionList: ILinkedList<() => void>;
   scheduledConnectorManagerList: ILinkedList<IConnectorManager>;
 
   batch(action: (context: IErrorScopeContext) => void, finalize?: () => void): void;

@@ -3,7 +3,7 @@ import { ISignalOptions } from './types';
 import { EqualComparer } from './utils';
 
 export function signal<T>(initialValue: T, options?: ISignalOptions<T>) {
-  const comparer = new EqualComparer(options?.comparer);
+  const comparer = new EqualComparer(options?.comparer, options?.name ? `signal-comparer-${options?.name}` : undefined);
   const leader = new VersionLeader({
     isDirty: false,
     confirm: (instance) => instance.isDirty,
@@ -12,7 +12,7 @@ export function signal<T>(initialValue: T, options?: ISignalOptions<T>) {
 
   comparer.setValue(initialValue);
 
-  function getter(...args: any[]): any {
+  function signal_getter(...args: any[]): any {
     // No arguments: act as getter
     if (args.length === 0) {
       globalScheduler.connectorManager?.track(leader);
@@ -25,7 +25,7 @@ export function signal<T>(initialValue: T, options?: ISignalOptions<T>) {
     }
   }
 
-  getter.comparer = comparer;
-  getter.leader = leader;
-  return getter;
+  signal_getter.comparer = comparer;
+  signal_getter.leader = leader;
+  return signal_getter;
 }

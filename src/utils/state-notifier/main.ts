@@ -2,19 +2,26 @@ import { Disposable } from '../disposable';
 import { EqualComparer, IEqualComparer } from '../equal-comparer';
 import { ErrorScope } from '../error-scope';
 import { ILinkedList, ILinkedNode, LinkedList } from '../linked-list';
-import { IStateNotifier } from './types';
+import { IStateNotifier, IStateNotifierOptions } from './types';
 
 export class StateNotifier<T> extends Disposable implements IStateNotifier<T> {
+  private _name?: string;
   private _comparer: IEqualComparer<T>;
   private _subscribers: ILinkedList<(value: T) => void>;
 
-  constructor(value: T, comparer?: (x: T, y: T) => boolean) {
+  constructor(value: T, options?: IStateNotifierOptions<T>) {
     super();
 
-    this._comparer = new EqualComparer(comparer);
+    this._name = options?.name;
+
+    this._comparer = new EqualComparer(options?.comparer);
     this._comparer.setValue(value);
 
     this._subscribers = new LinkedList<(value: T) => void>();
+  }
+
+  get name(): string | undefined {
+    return this._name;
   }
 
   get value(): T {

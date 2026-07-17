@@ -1,13 +1,20 @@
 import { Disposable, IStateNotifier, StateNotifier } from '../utils';
+import { globalScheduler } from './scheduler';
 import { IDirtyMarkable } from './types';
 
 export class DirtyMarkable extends Disposable implements IDirtyMarkable {
+  protected _name?: string;
   protected _dirtyNotifier: IStateNotifier<boolean>;
 
-  constructor(isDirty: boolean) {
+  constructor(isDirty: boolean, name?: string) {
     super();
 
-    this._dirtyNotifier = new StateNotifier(isDirty);
+    this._name = name;
+    this._dirtyNotifier = new StateNotifier(isDirty, { name: name ? `dirty-notifier-${name}` : undefined });
+  }
+
+  get name(): string | undefined {
+    return this._name;
   }
 
   get isDirty(): boolean {
@@ -16,7 +23,7 @@ export class DirtyMarkable extends Disposable implements IDirtyMarkable {
 
   markDirty(): void {
     if (!this._dirtyNotifier.value) {
-      this._dirtyNotifier.notify(true);
+      globalScheduler.batch(() => this._dirtyNotifier.notify(true));
     }
   }
 

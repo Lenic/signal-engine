@@ -8,14 +8,20 @@ function defaultComparer<T>(x: T, y: T): boolean {
 const DEFAULT_VALUE = Symbol('default_value');
 
 export class EqualComparer<T> extends Disposable implements IEqualComparer<T> {
+  private _name?: string;
   private _value: T | typeof DEFAULT_VALUE;
   private _comparer: (x: T, y: T) => boolean;
 
-  constructor(comparer?: (x: T, y: T) => boolean) {
+  constructor(comparer?: (x: T, y: T) => boolean, name?: string) {
     super();
 
+    this._name = name;
     this._value = DEFAULT_VALUE;
     this._comparer = comparer ?? defaultComparer;
+  }
+
+  get name(): string | undefined {
+    return this._name;
   }
 
   get value(): T {
