@@ -116,10 +116,13 @@ describe('memo', () => {
 
     let dCount = 0;
     const dList: number[] = [];
-    effect(() => {
-      dCount++;
-      dList.push(b() + c());
-    }, 'effect');
+    effect(
+      () => {
+        dCount++;
+        dList.push(b() + c());
+      },
+      { name: 'effect' },
+    );
 
     // Initialization:
     // a = 1 -> b = 11, c = 100 -> b+c = 111
