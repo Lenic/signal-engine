@@ -5,4 +5,5 @@ export interface IEqualComparer<T> extends IDisposable {
   readonly name?: string;
 
   setValue(candidate: T): boolean;
+  isEqual(a: T, b: T): boolean;
 }

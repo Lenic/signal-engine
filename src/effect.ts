@@ -1,6 +1,16 @@
-import { ConnectorManager, globalScheduler, Schedulable, VersionFollower } from './core';
+import {
+  ConnectorManager,
+  globalScheduler,
+  IConnectorManager,
+  IObjectOptions,
+  Schedulable,
+  VersionFollower,
+} from './core';
+import { ILinkedNode } from './utils';
 
-export function effect(action: () => void, name?: string) {
+export function effect(action: () => void, options?: IObjectOptions) {
+  const { name } = options ?? {};
+
   const task = new Schedulable(name ? `effect-schedulable-${name}` : undefined);
   const follower = new VersionFollower({ name: name ? `effect-follower-${name}` : undefined });
   const manager = new ConnectorManager(
@@ -13,38 +23,36 @@ export function effect(action: () => void, name?: string) {
     name ? `effect-connector-manager-${name}` : undefined,
   );
 
+  let node: ILinkedNode<IConnectorManager> | null = null;
   function dispose() {
+    node?.removeSelf();
+    node = null;
+
     task.dispose();
     manager.dispose();
     follower.dispose();
   }
+
   dispose.task = task;
-  dispose.follower = follower;
   dispose.manager = manager;
+  dispose.follower = follower;
 
   task.onScheduleChange((scheduled) => {
     if (scheduled) {
-      globalScheduler.scheduledConnectorManagerList.append(manager);
+      node = globalScheduler.scheduledConnectorManagerList.append(manager);
+      node.onRemoved = () => void (node = null);
+    } else {
+      node = null;
     }
   });
 
-  let iterativeCount = 0;
   follower.onDirty(() => {
     follower.clearDirty();
 
-    iterativeCount += 1;
-    try {
-      if (iterativeCount > 100) {
-        throw new Error('[effect]: Maximum iteration limit exceeded.');
-      }
-
-      if (globalScheduler.isRunning) {
-        task.markScheduled();
-      } else {
-        manager.run();
-      }
-    } finally {
-      iterativeCount -= 1;
+    if (globalScheduler.isRunning) {
+      task.markScheduled();
+    } else {
+      manager.run();
     }
   });
 

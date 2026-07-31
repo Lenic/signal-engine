@@ -37,4 +37,8 @@ export class EqualComparer<T> extends Disposable implements IEqualComparer<T> {
     this._value = candidate;
     return true;
   }
+
+  isEqual(a: T, b: T): boolean {
+    return this._comparer(a, b);
+  }
 }

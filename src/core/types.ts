@@ -66,9 +66,14 @@ export interface IConnectorManager<T = void> extends IDisposable {
   track(provider: IVersionLeader): void;
 }
 
+export interface IPendingSignalUpdate {
+  flush(): void;
+}
+
 export interface IScheduler {
   isRunning: boolean;
   connectorManager?: IConnectorManager;
+  pendingSignalUpdateList: ILinkedList<IPendingSignalUpdate>;
   scheduledConnectorManagerList: ILinkedList<IConnectorManager>;
 
   batch(action: (context: IErrorScopeContext) => void, finalize?: () => void): void;
