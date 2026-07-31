@@ -2,7 +2,7 @@ import { ConnectorManager, globalScheduler, IVersionLeader, VersionFollower, Ver
 import { ISignalOptions } from './types';
 import { EqualComparer } from './utils';
 
-export function memo<T>(fn: () => T, options?: ISignalOptions<T>) {
+export function memo<T>(fn: () => T, options?: ISignalOptions<T>): () => T {
   let leader: IVersionLeader;
   const comparer = new EqualComparer<T>();
 
@@ -34,22 +34,24 @@ export function memo<T>(fn: () => T, options?: ISignalOptions<T>) {
     name: options?.name ? `memo-leader-${options?.name}` : undefined,
   });
 
-  function getter(): T {
+  function memo_getter(): T {
     globalScheduler.connectorManager?.track(leader);
 
     leader.confirm();
     return comparer.value;
   }
 
-  getter.comparer = comparer;
-  getter.follower = follower;
-  getter.manager = manager;
-  getter.leader = leader;
-  getter.dispose = () => {
+  memo_getter.leader = leader;
+  memo_getter.manager = manager;
+  memo_getter.comparer = comparer;
+  memo_getter.follower = follower;
+
+  memo_getter.dispose = () => {
     comparer.dispose();
     follower.dispose();
     manager.dispose();
     leader.dispose();
   };
-  return getter;
+
+  return memo_getter;
 }
