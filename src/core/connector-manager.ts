@@ -1,4 +1,4 @@
-import { Disposable, ILinkedList, ILinkedNode, LinkedList } from '../utils';
+import { Disposable, ErrorScope, IDisposable, ILinkedList, ILinkedNode, isDisposable, LinkedList } from '../utils';
 import { globalScheduler } from './scheduler';
 import { IConnector, IConnectorManager, IVersionFollower, IVersionLeader } from './types';
 
@@ -7,6 +7,7 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
   private _isInitialized: boolean;
   private _follower: IVersionFollower;
   private _list: ILinkedList<IConnector>;
+  private _adoptedList: ILinkedList<() => void>;
 
   private _isExecuting: boolean;
   private _current: ILinkedNode<IConnector> | null;
@@ -23,6 +24,7 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
     this._action = action;
     this._follower = follower;
     this._list = new LinkedList<IConnector>();
+    this._adoptedList = new LinkedList<() => void>();
   }
 
   get name(): string | undefined {
@@ -47,6 +49,11 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
       (context) => {
         if (!this.shouldRecompute()) return;
         this._isInitialized = true;
+
+        // The previous run's resources belong to the previous run only. Release them before
+        // the action produces a new generation, so the two never overlap. Captured, because a
+        // failing cleanup must not prevent this recomputation.
+        context.capture(() => this.disposeAdopted());
 
         this._current = this._list.head;
         context.capture(() => void (result = this._action()));
@@ -95,6 +102,12 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
     }
   }
 
+  adopt(disposable: IDisposable | (() => void)): void {
+    this.checkDisposed();
+
+    this._adoptedList.append(isDisposable(disposable) ? () => void disposable.dispose() : disposable);
+  }
+
   disconnect(): void {
     this._list.forEach((v) => v.unsubscribe());
     this._list.clear();
@@ -112,8 +125,19 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
     this._action = undefined as unknown as () => T;
     this._follower = undefined as unknown as IVersionFollower;
 
+    this.disposeAdopted();
+    this._adoptedList = undefined as unknown as ILinkedList<() => void>;
+
     this.disconnect();
     this._list = undefined as unknown as ILinkedList<IConnector>;
+  }
+
+  private disposeAdopted(): void {
+    if (this._adoptedList.size === 0) return;
+
+    // Every adopted resource must be released even when one of them throws, so each release
+    // is captured individually and the collected errors are rethrown as one.
+    ErrorScope.getInstance().run((context) => this._adoptedList.clear((release) => context.capture(release)));
   }
 
   private shouldRecompute() {

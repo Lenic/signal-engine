@@ -64,6 +64,16 @@ export interface IConnectorManager<T = void> extends IDisposable {
   run(): T;
   disconnect(): void;
   track(provider: IVersionLeader): void;
+
+  /**
+   * Takes over responsibility for disposing a resource, binding it to the lifetime of the
+   * *current execution* rather than to the manager as a whole.
+   *
+   * Adopted resources are released right before every recomputation and when the manager
+   * itself is disposed, so anything created while the action runs - a nested effect, a
+   * timer, a subscription - can never outlive the run that created it.
+   */
+  adopt(disposable: IDisposable | (() => void)): void;
 }
 
 export interface IPendingSignalUpdate {

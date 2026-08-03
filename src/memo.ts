@@ -1,8 +1,8 @@
 import { ConnectorManager, globalScheduler, IVersionLeader, VersionFollower, VersionLeader } from './core';
-import { ISignalOptions } from './types';
+import { IMemoValue, ISignalOptions } from './types';
 import { EqualComparer } from './utils';
 
-export function memo<T>(fn: () => T, options?: ISignalOptions<T>): () => T {
+export function memo<T>(fn: () => T, options?: ISignalOptions<T>): IMemoValue<T> {
   let leader: IVersionLeader;
   const comparer = new EqualComparer<T>();
 

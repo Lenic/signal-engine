@@ -11,6 +11,11 @@ import { ILinkedNode } from './utils';
 export function effect(action: () => void, options?: IObjectOptions) {
   const { name } = options ?? {};
 
+  // Whoever is executing right now adopts this effect: it gets disposed before that owner
+  // recomputes and when the owner itself is disposed. At the top level there is no owner,
+  // so the caller is the only one holding the returned `dispose`.
+  const owner = globalScheduler.connectorManager;
+
   const task = new Schedulable(name ? `effect-schedulable-${name}` : undefined);
   const follower = new VersionFollower({ name: name ? `effect-follower-${name}` : undefined });
   const manager = new ConnectorManager(
@@ -36,6 +41,10 @@ export function effect(action: () => void, options?: IObjectOptions) {
   dispose.task = task;
   dispose.manager = manager;
   dispose.follower = follower;
+
+  // Handed over before the first run, so a nested effect that throws on its initial
+  // execution is still tracked by its owner instead of leaking.
+  owner?.adopt(dispose);
 
   task.onScheduleChange((scheduled) => {
     if (scheduled) {
