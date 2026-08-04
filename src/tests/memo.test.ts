@@ -217,4 +217,32 @@ describe('memo', () => {
     a(3);
     expect(m()).toBe(6);
   });
+
+  test('@201: effect will skip if the memo disposed the effect', () => {
+    debugger;
+    const s = signal(0);
+    let dispose1!: () => void;
+    let e1runs = 0;
+
+    const a = memo(() => {
+      if (s() === 1) dispose1();
+      return s();
+    });
+
+    dispose1 = effect(() => {
+      a();
+      e1runs++;
+    });
+    effect(() => {
+      a();
+    }); // keep `a` alive
+
+    expect(e1runs).toBe(1);
+    s(1);
+    expect(e1runs).toBe(1); // disposed during propagation, should not re-run
+
+    s(2);
+    s(3);
+    expect(e1runs).toBe(1); // no subscription leak
+  });
 });

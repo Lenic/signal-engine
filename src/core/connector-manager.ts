@@ -109,8 +109,7 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
   }
 
   disconnect(): void {
-    this._list.forEach((v) => v.unsubscribe());
-    this._list.clear();
+    this._list.clear((v) => v.unsubscribe());
   }
 
   dispose() {
@@ -145,9 +144,22 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
 
     let node = this._list.head;
     while (node) {
-      const currentVersion = node.value.snapshot.instance.confirm();
-      if (currentVersion !== node.value.snapshot.version) return true;
-      node = node.next;
+      // `confirm()` re-enters user code - a memo body - which is free to dispose this very
+      // manager and hand every node of `_list` back to the pool. So everything this iteration
+      // still needs is read *before* that call, and disposal is checked *after* it: a node
+      // that has been released reports `undefined` as its value and `null` as its successor.
+      const { snapshot } = node.value;
+      const recordedVersion = snapshot.version;
+      const next = node.next;
+
+      const hasChanged = snapshot.instance.confirm() !== recordedVersion;
+
+      // Disposal outranks a pending change: once confirming has torn this manager down there
+      // is nothing left to recompute, and `next` now points into the pool.
+      if (this.isDisposed) return false;
+      if (hasChanged) return true;
+
+      node = next;
     }
     return false;
   }
