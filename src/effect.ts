@@ -6,10 +6,10 @@ import {
   Schedulable,
   VersionFollower,
 } from './core';
-import { IEffectAction } from './types';
+import { IEffectAction, IEffectCleanup } from './types';
 import { ILinkedNode } from './utils';
 
-export function effect(action: IEffectAction, options?: IObjectOptions) {
+export function effect(action: IEffectAction, options?: IObjectOptions): IEffectCleanup {
   const { name } = options ?? {};
 
   // Whoever is executing right now adopts this effect: it gets disposed before that owner
@@ -22,8 +22,6 @@ export function effect(action: IEffectAction, options?: IObjectOptions) {
   const manager = new ConnectorManager(
     follower,
     () => {
-      task.clearScheduled();
-
       // A returned function is this run's cleanup. Adopting it binds it to this run, so it is
       // released right before the next recomputation and once more on disposal. Registered
       // after the action, which means an action that disposed itself mid-run leaves nothing
@@ -57,7 +55,14 @@ export function effect(action: IEffectAction, options?: IObjectOptions) {
   task.onScheduleChange((scheduled) => {
     if (scheduled) {
       node = globalScheduler.scheduledConnectorManagerList.append(manager);
-      node.onRemoved = () => void (node = null);
+      // Leaving the queue *is* the scheduled run being consumed, and that happens whether or
+      // not `run()` ends up finding anything to recompute. Clearing the flag here rather than
+      // from inside the action keeps it honest when the action is skipped - otherwise the task
+      // stays marked forever and every later `markScheduled()` is silently a no-op.
+      node.onRemoved = () => {
+        node = null;
+        task.clearScheduled();
+      };
     } else {
       node = null;
     }

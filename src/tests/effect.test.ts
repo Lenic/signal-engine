@@ -220,6 +220,49 @@ describe('effect', () => {
     }
   });
 
+  test('a notification that turns out to be a no-op does not wedge the schedule', () => {
+    // items -> isLoaded -> msg -> effect. Writing a different truthy value to `items` notifies
+    // the whole chain, yet leaves `isLoaded` unchanged, so the effect is scheduled and then
+    // skipped. That skipped run must not leave the schedule marked, or every later change is
+    // silently dropped.
+    const items = signal<number[] | undefined>(undefined);
+    const isLoaded = memo(() => !!items());
+    const msg = memo(() => (isLoaded() ? 'loaded' : 'not loaded'));
+
+    let seen = '';
+    let runs = 0;
+    const dispose = effect(() => {
+      runs++;
+      seen = msg();
+    });
+
+    expect(seen).toBe('not loaded');
+    expect(runs).toBe(1);
+
+    items([1, 2, 3]);
+    expect(seen).toBe('loaded');
+    expect(runs).toBe(2);
+
+    // `isLoaded` stays `true`, so `msg` keeps its value and the effect must not re-run.
+    items([4, 5]);
+    expect(seen).toBe('loaded');
+    expect(runs).toBe(2);
+    expect(dispose.task.isScheduled).toBe(false);
+
+    // The real change must still get through.
+    items(undefined);
+    expect(seen).toBe('not loaded');
+    expect(runs).toBe(3);
+
+    // And repeatedly, so a single recovery is not mistaken for a fix.
+    items([6]);
+    expect(seen).toBe('loaded');
+    items([7]);
+    expect(seen).toBe('loaded');
+    items(undefined);
+    expect(seen).toBe('not loaded');
+  });
+
   test('returned cleanup runs before each re-run and once on disposal', () => {
     const s = signal(1);
     const log: string[] = [];
