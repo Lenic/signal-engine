@@ -18,15 +18,7 @@ const framework: ReactiveFramework = {
     return { read: () => c() };
   },
   effect(fn) {
-    // The suite's effects may return a cleanup function. Hand it to the running manager so it
-    // is released before the next recomputation and on disposal - the same lifetime the suite
-    // expects. Without this the suite detects no cleanup support and skips those cases.
-    return effect(() => {
-      const cleanup = fn();
-      if (typeof cleanup === 'function') {
-        globalScheduler.connectorManager?.adopt(cleanup);
-      }
-    });
+    return effect(fn);
   },
   run(fn) {
     fn();

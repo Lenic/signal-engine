@@ -6,9 +6,10 @@ import {
   Schedulable,
   VersionFollower,
 } from './core';
+import { IEffectAction } from './types';
 import { ILinkedNode } from './utils';
 
-export function effect(action: () => void, options?: IObjectOptions) {
+export function effect(action: IEffectAction, options?: IObjectOptions) {
   const { name } = options ?? {};
 
   // Whoever is executing right now adopts this effect: it gets disposed before that owner
@@ -23,7 +24,14 @@ export function effect(action: () => void, options?: IObjectOptions) {
     () => {
       task.clearScheduled();
 
-      action();
+      // A returned function is this run's cleanup. Adopting it binds it to this run, so it is
+      // released right before the next recomputation and once more on disposal. Registered
+      // after the action, which means an action that disposed itself mid-run leaves nothing
+      // behind - `adopt` is a no-op by then.
+      const cleanup = action();
+      if (typeof cleanup === 'function') {
+        manager.adopt(cleanup);
+      }
     },
     name ? `effect-connector-manager-${name}` : undefined,
   );

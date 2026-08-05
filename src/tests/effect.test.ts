@@ -153,6 +153,101 @@ describe('effect', () => {
     expect(normalEffectRunCount).toBe(2);
   });
 
+  test('returned cleanup runs before each re-run and once on disposal', () => {
+    const s = signal(1);
+    const log: string[] = [];
+
+    const dispose = effect(() => {
+      const value = s();
+      log.push(`run:${value}`);
+
+      return () => log.push(`cleanup:${value}`);
+    });
+
+    expect(log).toEqual(['run:1']);
+
+    // The previous run's cleanup fires first, then the new run.
+    s(2);
+    expect(log).toEqual(['run:1', 'cleanup:1', 'run:2']);
+
+    s(3);
+    expect(log).toEqual(['run:1', 'cleanup:1', 'run:2', 'cleanup:2', 'run:3']);
+
+    dispose();
+    expect(log).toEqual(['run:1', 'cleanup:1', 'run:2', 'cleanup:2', 'run:3', 'cleanup:3']);
+
+    // Nothing left to trigger, and no further cleanup.
+    s(4);
+    expect(log).toEqual(['run:1', 'cleanup:1', 'run:2', 'cleanup:2', 'run:3', 'cleanup:3']);
+  });
+
+  test('a run that returns no cleanup leaves nothing behind', () => {
+    const s = signal(1);
+    let cleanupCount = 0;
+
+    effect(() => {
+      // Only the odd runs register a cleanup.
+      if (s() % 2 === 1) {
+        return () => void cleanupCount++;
+      }
+    });
+
+    expect(cleanupCount).toBe(0);
+
+    s(2); // releases run 1's cleanup, registers none
+    expect(cleanupCount).toBe(1);
+
+    s(3); // run 2 had no cleanup to release
+    expect(cleanupCount).toBe(1);
+
+    s(4); // releases run 3's cleanup
+    expect(cleanupCount).toBe(2);
+  });
+
+  test('cleanup reads do not become dependencies', () => {
+    const a = signal(1);
+    const b = signal(100);
+    let runCount = 0;
+
+    effect(() => {
+      runCount++;
+      a();
+
+      return () => void b();
+    });
+
+    expect(runCount).toBe(1);
+
+    // `b` was only ever read by a cleanup, so it must not be a dependency.
+    b(200);
+    expect(runCount).toBe(1);
+
+    a(2);
+    expect(runCount).toBe(2);
+  });
+
+  test('cleanup is not double-invoked when it disposes its own effect', () => {
+    const s = signal(1);
+    let cleanupCount = 0;
+    let dispose: (() => void) | undefined;
+
+    dispose = effect(() => {
+      s();
+
+      return () => {
+        cleanupCount++;
+        dispose?.();
+      };
+    });
+
+    s(2);
+    expect(cleanupCount).toBe(1);
+
+    // The effect disposed itself from within the cleanup, so nothing runs again.
+    s(3);
+    expect(cleanupCount).toBe(1);
+  });
+
   test('disposing an effect during its own execution (self-dispose)', () => {
     const s = signal(1);
     let runCount = 0;
