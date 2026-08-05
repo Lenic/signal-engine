@@ -6,10 +6,7 @@ export function memo<T>(fn: () => T, options?: ISignalOptions<T>): IMemoValue<T>
   let leader: IVersionLeader;
   const comparer = new EqualComparer<T>();
 
-  const follower = new VersionFollower({
-    isDirty: false,
-    name: options?.name ? `memo-follower-${options?.name}` : undefined,
-  });
+  const follower = new VersionFollower({ name: options?.name ? `memo-follower-${options?.name}` : undefined });
   follower.onDirty(() => {
     follower.clearDirty();
     leader.markDirty();

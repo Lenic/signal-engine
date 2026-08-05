@@ -29,7 +29,7 @@ export interface ISchedulable extends IDisposable {
 
 export interface IVersionFollowerOptions extends IObjectOptions {
   /**
-   * @default `true`
+   * @default `false`
    */
   isDirty?: boolean;
 }

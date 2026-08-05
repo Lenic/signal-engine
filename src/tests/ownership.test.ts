@@ -137,7 +137,7 @@ describe('ownership', () => {
     expect(innerRun).toBe(runsWhileAlive);
   });
 
-  test('a nested effect disposed before the flush loop never runs', () => {
+  test('a nested effect disposed right after creation runs exactly once', () => {
     const a = signal(1);
     let childRun = 0;
 
@@ -147,16 +147,18 @@ describe('ownership', () => {
         childRun++;
         a();
       });
-      // A nested effect is created while the scheduler is already running, so its first
-      // execution is queued rather than immediate. Disposing it here means it never runs.
+      // A nested effect runs immediately on creation - being created while the scheduler is
+      // already running makes no difference - so disposing it here leaves exactly that one
+      // run behind, and no subscription.
       inner();
     });
 
-    expect(childRun).toBe(0);
+    expect(childRun).toBe(1);
 
-    // And the owner's rerun must not choke on releasing an already-disposed child.
+    // The owner's rerun must not choke on releasing an already-disposed child, and the
+    // disposed child must not have reacted to `a` on its own.
     expect(() => a(2)).not.toThrow();
-    expect(childRun).toBe(0);
+    expect(childRun).toBe(2); // the owner re-ran and created a fresh child
   });
 
   test('a throwing cleanup still lets its siblings be released', () => {

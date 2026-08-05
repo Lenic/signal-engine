@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
+import { globalScheduler } from '../core';
 import { signal } from '../signal';
 import { effect } from '../effect';
+import { memo } from '../memo';
 
 describe('effect', () => {
   test('basic reactivity', () => {
@@ -151,6 +153,71 @@ describe('effect', () => {
     // Trigger normal effect update - it should still execute correctly since scheduler should recover
     b(20);
     expect(normalEffectRunCount).toBe(2);
+  });
+
+  test('the first run is synchronous in every context effect can be created from', () => {
+    // Each entry invokes `body` from one distinct context an effect can be created in. The
+    // contexts are independent, so no ordering between them is asserted - only that each one
+    // reaches the body and that the body's effect has already run when `effect()` returns.
+    const contexts: Array<[label: string, within: (body: () => void) => void]> = [
+      ['at the top level', (body) => body()],
+      ['inside a batch', (body) => globalScheduler.batch(body)],
+      ['inside nested batches', (body) => globalScheduler.batch(() => globalScheduler.batch(body))],
+      [
+        'inside an effect action',
+        (body) => {
+          const host = signal(0);
+          effect(() => {
+            host();
+            body();
+          });
+        },
+      ],
+      [
+        'inside a memo computation',
+        (body) => {
+          const m = memo(() => {
+            body();
+            return 1;
+          });
+          m();
+        },
+      ],
+      [
+        'inside a cleanup',
+        (body) => {
+          const host = signal(0);
+          effect(() => {
+            host();
+            return body;
+          });
+
+          host(1); // releases the previous run's cleanup, so `body` runs mid-flush
+        },
+      ],
+    ];
+
+    for (const [label, within] of contexts) {
+      let reached = false;
+
+      within(() => {
+        const s = signal(1);
+        let runs = 0;
+
+        effect(() => {
+          s();
+          runs++;
+        });
+
+        // A first run deferred to the flush would leave this at 0.
+        expect(runs, label).toBe(1);
+
+        reached = true;
+      });
+
+      // Guards against a context that silently never invokes the body.
+      expect(reached, label).toBe(true);
+    }
   });
 
   test('returned cleanup runs before each re-run and once on disposal', () => {

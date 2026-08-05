@@ -73,5 +73,10 @@ export function effect(action: IEffectAction, options?: IObjectOptions) {
     }
   });
 
+  // The first execution belongs to `effect()` itself, not to the scheduler: by the time this
+  // returns, the body has run and its dependencies are subscribed. Batching only governs
+  // *re-runs* triggered by a dependency change.
+  manager.run();
+
   return dispose;
 }
