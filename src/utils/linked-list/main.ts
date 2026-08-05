@@ -62,11 +62,20 @@ export class LinkedList<T> implements ILinkedList<T>, ILinkedListInternalActions
     let current = this._head;
 
     while (current) {
-      callback?.(current.value, index);
+      const nodeValue = current.value;
 
-      index += 1;
+      // Detached *before* the callback runs. A callback is free to re-enter `clear` on this
+      // same list - a cleanup that disposes its own owner does exactly that - and it must not
+      // find the entry that is already being processed still sitting in the list.
       current.removeSelf();
-      current = this._head;
+
+      try {
+        callback?.(nodeValue, index);
+      } finally {
+        index += 1;
+
+        current = this._head;
+      }
     }
 
     this._size = 0;
@@ -79,10 +88,14 @@ export class LinkedList<T> implements ILinkedList<T>, ILinkedListInternalActions
     let current = this._head;
 
     while (current) {
-      callback(current.value, index);
-
-      index += 1;
+      const nodeValue = current.value;
       current = current.next;
+
+      try {
+        callback(nodeValue, index);
+      } finally {
+        index += 1;
+      }
     }
   }
 
