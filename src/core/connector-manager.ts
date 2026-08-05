@@ -54,9 +54,14 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
         // the action produces a new generation, so the two never overlap. Captured, because a
         // failing cleanup must not prevent this recomputation.
         context.capture(() => this.disposeAdopted());
+        // A cleanup is allowed to dispose this manager. That ends the run: there is no new
+        // generation left to produce, and `_list` is already gone.
+        if (this.isDisposed) return;
 
         this._current = this._list.head;
         context.capture(() => void (result = this._action()));
+        // Same for the action itself - disposing mid-run is a lifecycle event, not an error.
+        if (this.isDisposed) return;
 
         if (this._current) {
           this._current.value.unsubscribe();
@@ -75,7 +80,10 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
   }
 
   track(leader: IVersionLeader): void {
-    this.checkDisposed();
+    // An action is free to dispose itself and keep reading afterwards. Those reads belong to
+    // nobody, so they are simply left untracked - throwing here would turn a legitimate
+    // lifecycle event into an exception raised inside user code.
+    if (this.isDisposed) return;
 
     try {
       if (!this._current) {
@@ -103,7 +111,9 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
   }
 
   adopt(disposable: IDisposable | (() => void)): void {
-    this.checkDisposed();
+    // Same reasoning as `track`: an already-disposed manager has no run left to bind a
+    // resource to, so the request is ignored rather than rejected.
+    if (this.isDisposed) return;
 
     this._adoptedList.append(isDisposable(disposable) ? () => void disposable.dispose() : disposable);
   }
