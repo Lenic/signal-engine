@@ -144,9 +144,20 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
   private disposeAdopted(): void {
     if (this._adoptedList.size === 0) return;
 
+    // Releasing a resource belongs to no reactive scope. Whatever a cleanup reads must not
+    // become a dependency - neither of this manager, nor of whoever happens to be running when
+    // the disposal is triggered from the outside - and whatever it creates must not be adopted
+    // into the very list being drained here. Note that `isRunning` is deliberately left as it
+    // is, so writes performed by a cleanup stay batched.
+    const previousManager = globalScheduler.connectorManager;
+    globalScheduler.connectorManager = undefined;
+
     // Every adopted resource must be released even when one of them throws, so each release
     // is captured individually and the collected errors are rethrown as one.
-    ErrorScope.getInstance().run((context) => this._adoptedList.clear((release) => context.capture(release)));
+    ErrorScope.getInstance().run(
+      (context) => this._adoptedList.clear((release) => context.capture(release)),
+      () => void (globalScheduler.connectorManager = previousManager),
+    );
   }
 
   private shouldRecompute() {
