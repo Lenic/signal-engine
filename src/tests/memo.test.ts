@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { signal } from '../signal';
 import { effect } from '../effect';
 import { memo } from '../memo';
+import type { IMemoValue } from '../types';
 
 describe('memo', () => {
   test('basic computation', () => {
@@ -244,5 +245,18 @@ describe('memo', () => {
     s(2);
     s(3);
     expect(e1runs).toBe(1); // no subscription leak
+  });
+
+  test('a memo whose body reads itself reports the cycle, not a downstream symptom', () => {
+    const m: IMemoValue<number> = memo(() => m() + 1);
+
+    expect(() => m()).toThrow('[ConnectorManager]: can not run iteratively.');
+  });
+
+  test('two memos reading each other report the cycle', () => {
+    const a: IMemoValue<number> = memo(() => b());
+    const b: IMemoValue<number> = memo(() => a());
+
+    expect(() => a()).toThrow('[ConnectorManager]: can not run iteratively.');
   });
 });

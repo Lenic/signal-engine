@@ -59,7 +59,16 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
         if (this.isDisposed) return;
 
         this._current = this._list.head;
+
+        // Guards the action against re-entering *itself* - a memo whose body reads its own
+        // value, or two memos reading each other. The window is deliberately just the action:
+        // once it has returned, this same manager may legitimately be run again from the flush
+        // loop nested inside this very `run` - that is how an effect that writes its own
+        // dependency gets its follow-up execution.
+        this._isExecuting = true;
         context.capture(() => void (result = this._action()));
+        this._isExecuting = false;
+
         // Same for the action itself - disposing mid-run is a lifecycle event, not an error.
         if (this.isDisposed) return;
 
