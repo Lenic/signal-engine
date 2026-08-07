@@ -247,16 +247,41 @@ describe('memo', () => {
     expect(e1runs).toBe(1); // no subscription leak
   });
 
+  test('a memo re-dirtied by its own recomputation does not stay stuck clean', () => {
+    const s = signal(1);
+    let runs = 0;
+
+    const c = memo(() => {
+      runs++;
+      s(s() + 1);
+
+      return s();
+    });
+
+    expect(c()).toBe(2);
+    expect(s()).toBe(2);
+    expect(runs).toBe(1);
+
+    // The run itself left `s` dirty, so the next read has to recompute instead of handing back
+    // the cache - the dirt raised *during* a confirmation must outlive that confirmation.
+    expect(c()).toBe(3);
+    expect(s()).toBe(3);
+    expect(runs).toBe(2);
+
+    expect(c()).toBe(4);
+    expect(runs).toBe(3);
+  });
+
   test('a memo whose body reads itself reports the cycle, not a downstream symptom', () => {
     const m: IMemoValue<number> = memo(() => m() + 1);
 
-    expect(() => m()).toThrow('[ConnectorManager]: can not run iteratively.');
+    expect(() => m()).toThrow('[memo]: circular dependency detected.');
   });
 
   test('two memos reading each other report the cycle', () => {
     const a: IMemoValue<number> = memo(() => b());
     const b: IMemoValue<number> = memo(() => a());
 
-    expect(() => a()).toThrow('[ConnectorManager]: can not run iteratively.');
+    expect(() => a()).toThrow('[memo]: circular dependency detected.');
   });
 });

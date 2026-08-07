@@ -40,7 +40,10 @@ export interface IVersionFollower extends IDirtyMarkable, IDisposable {
 
 export interface IVersionLeaderOptions extends IObjectOptions {
   isDirty: boolean;
-  confirm: (leader: IVersionLeader) => boolean;
+  /**
+   * @default `() => true`
+   */
+  confirm?: (leader: IVersionLeader) => boolean;
 }
 
 export interface IVersionLeader extends IDirtyMarkable, IVersioned, IDisposable {
@@ -60,6 +63,12 @@ export interface IConnector {
 
 export interface IConnectorManager<T = void> extends IDisposable {
   readonly name?: string;
+
+  /**
+   * Whether the action is executing right now. A value produced by this manager that gets read
+   * while this is `true` is being read from inside its own computation - a circular dependency.
+   */
+  readonly isExecuting: boolean;
 
   run(): T;
   disconnect(): void;

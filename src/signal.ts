@@ -12,7 +12,6 @@ export function signal<T>(initialValue: T, options?: ISignalOptions<T>): ISignal
   const comparer = new EqualComparer(options?.comparer, options?.name ? `signal-comparer-${options?.name}` : undefined);
   const leader = new VersionLeader({
     isDirty: false,
-    confirm: (instance) => instance.isDirty,
     name: options?.name ? `signal-leader-${options?.name}` : undefined,
   });
   const task = new Schedulable(options?.name ? `signal-schedulable-${options?.name}` : undefined);

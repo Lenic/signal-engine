@@ -26,12 +26,20 @@ export function memo<T>(fn: () => T, options?: ISignalOptions<T>): IMemoValue<T>
   );
 
   leader = new VersionLeader({
-    confirm: (instance) => (instance.isDirty ? manager.run() : false),
+    // Only invoked when the leader was dirty; `run` answers whether the recomputed value differs.
+    confirm: () => manager.run(),
     isDirty: true,
     name: options?.name ? `memo-leader-${options?.name}` : undefined,
   });
 
   function memo_getter(): T {
+    // Reading this memo from inside its own computation is a circular dependency: the value
+    // being asked for is precisely the one still being produced. Reported here rather than
+    // left to surface later as an unrelated "uninitialized value" complaint.
+    if (manager.isExecuting) {
+      throw new Error(`[memo]: circular dependency detected${options?.name ? ` in "${options.name}"` : ''}.`);
+    }
+
     globalScheduler.connectorManager?.track(leader);
 
     leader.confirm();

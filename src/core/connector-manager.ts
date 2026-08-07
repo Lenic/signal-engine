@@ -31,6 +31,10 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
     return this._name;
   }
 
+  get isExecuting(): boolean {
+    return this._isExecuting;
+  }
+
   run(): T {
     this.checkDisposed();
 

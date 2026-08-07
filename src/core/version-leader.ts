@@ -3,6 +3,8 @@ import { DirtyMarkable } from './dirty-markable';
 import { globalScheduler } from './scheduler';
 import { IVersionFollower, IVersionLeader, IVersionLeaderOptions } from './types';
 
+const defaultConfirmAction = () => true;
+
 export class VersionLeader extends DirtyMarkable implements IVersionLeader {
   private _versionConfirmer: (leader: IVersionLeader) => boolean;
   private _versionNotifier: IStateNotifier<number>;
@@ -11,7 +13,7 @@ export class VersionLeader extends DirtyMarkable implements IVersionLeader {
   constructor(options: IVersionLeaderOptions) {
     super(options.isDirty, options.name);
 
-    this._versionConfirmer = options.confirm;
+    this._versionConfirmer = options.confirm ?? defaultConfirmAction;
 
     this._versionNotifier = new StateNotifier(0, {
       name: options.name ? `version-notifier-${options.name}` : undefined,
@@ -32,10 +34,16 @@ export class VersionLeader extends DirtyMarkable implements IVersionLeader {
   }
 
   confirm(): number {
-    if (!this.isDisposed && this._versionConfirmer(this)) {
+    // The dirt is consumed up front, because confirming it re-enters user code that may dirty
+    // this leader again - a memo whose body writes one of its own dependencies does exactly
+    // that. Clearing afterwards would wipe that fresh dirt along with the old one, and the
+    // leader would stay permanently "clean" while its sources had already moved on.
+    const wasDirty = this.isDirty;
+    this._dirtyNotifier.notify(false);
+
+    if (!this.isDisposed && wasDirty && this._versionConfirmer(this)) {
       globalScheduler.batch(() => this._versionNotifier.notify(this._versionNotifier.value + 1));
     }
-    this._dirtyNotifier.notify(false);
 
     return this._versionNotifier.value;
   }
