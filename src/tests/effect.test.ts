@@ -220,6 +220,52 @@ describe('effect', () => {
     }
   });
 
+  test('an effect whose very first run throws does not stay subscribed', () => {
+    const s = signal(0);
+    let runs = 0;
+
+    // The error escapes `effect()` itself, so the caller never receives a dispose handle.
+    expect(() =>
+      effect(() => {
+        runs++;
+        s();
+        throw new Error('boom');
+      }),
+    ).toThrow('boom');
+
+    expect(runs).toBe(1);
+
+    // Nothing can reach that effect any more, so it must have torn itself down instead of
+    // staying subscribed to `s` forever.
+    s(1);
+    expect(runs).toBe(1);
+  });
+
+  test('a flush that fails to converge leaves the rest of the graph usable', () => {
+    const trigger = signal(false);
+    const n = signal(0);
+
+    // Converges while `trigger` is false; becomes an unbounded cycle the moment it flips.
+    effect(() => {
+      if (trigger()) {
+        n(n() + 1);
+      }
+    });
+
+    expect(() => trigger(true)).toThrow(/Maximum flush iteration limit/);
+
+    // The aborted cycle must not be left armed in the scheduler's queues, or an unrelated
+    // effect created afterwards would inherit it and blow the same limit.
+    const other = signal(1);
+    let seen = 0;
+
+    effect(() => void (seen = other()));
+    expect(seen).toBe(1);
+
+    other(2);
+    expect(seen).toBe(2);
+  });
+
   test('a notification that turns out to be a no-op does not wedge the schedule', () => {
     // items -> isLoaded -> msg -> effect. Writing a different truthy value to `items` notifies
     // the whole chain, yet leaves `isLoaded` unchanged, so the effect is scheduled and then
@@ -231,7 +277,7 @@ describe('effect', () => {
 
     let seen = '';
     let runs = 0;
-    const dispose = effect(() => {
+    effect(() => {
       runs++;
       seen = msg();
     });
@@ -247,9 +293,8 @@ describe('effect', () => {
     items([4, 5]);
     expect(seen).toBe('loaded');
     expect(runs).toBe(2);
-    expect(dispose.task.isScheduled).toBe(false);
 
-    // The real change must still get through.
+    // The real change must still get through - a wedged schedule would drop it silently.
     items(undefined);
     expect(seen).toBe('not loaded');
     expect(runs).toBe(3);

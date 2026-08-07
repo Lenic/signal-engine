@@ -81,7 +81,15 @@ export function effect(action: IEffectAction, options?: IObjectOptions): IEffect
   // The first execution belongs to `effect()` itself, not to the scheduler: by the time this
   // returns, the body has run and its dependencies are subscribed. Batching only governs
   // *re-runs* triggered by a dependency change.
-  manager.run();
+  try {
+    manager.run();
+  } catch (error) {
+    // The error escapes before the caller ever receives `dispose`, so an effect left standing
+    // here would stay subscribed with nothing able to reach it. Tear it down first, then report.
+    dispose();
+
+    throw error;
+  }
 
   return dispose;
 }

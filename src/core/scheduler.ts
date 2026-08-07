@@ -23,6 +23,14 @@ export const globalScheduler: IScheduler = {
         while (this.pendingSignalUpdateList.size > 0 || this.scheduledConnectorManagerList.size > 0) {
           flushRound += 1;
           if (flushRound > 100) {
+            // A circuit breaker, not merely a tripwire. Everything still queued belongs to the
+            // cycle that refused to converge, and leaving it in place lets the next top-level
+            // batch walk straight back into the same loop. Pending writes are still flushed, so
+            // no signal is left with a wedged schedule; every queued recomputation is then
+            // dropped, which also clears the schedule flag of each manager it holds.
+            this.pendingSignalUpdateList.clear((v) => context.capture(() => v.flush()));
+            this.scheduledConnectorManagerList.clear();
+
             throw new Error('[Scheduler]: Maximum flush iteration limit exceeded.');
           }
 
