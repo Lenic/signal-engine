@@ -1,11 +1,13 @@
 import { ILinkedList, ILinkedNode, IStateNotifier, LinkedList, StateNotifier } from '../utils';
 import { DirtyMarkable } from './dirty-markable';
 import { globalScheduler } from './scheduler';
-import { IVersionFollower, IVersionLeader, IVersionLeaderOptions } from './types';
+import { ISnapshot, IVersionFollower, IVersionLeader, IVersionLeaderOptions } from './types';
 
 const defaultConfirmAction = () => true;
 
 export class VersionLeader extends DirtyMarkable implements IVersionLeader {
+  private _trackToken = 0;
+  private _trackedSnapshot: ISnapshot<IVersionLeader> | null = null;
   private _versionConfirmer: (leader: IVersionLeader) => boolean;
   private _versionNotifier: IStateNotifier<number>;
   private _followers: ILinkedList<IVersionFollower>;
@@ -21,6 +23,9 @@ export class VersionLeader extends DirtyMarkable implements IVersionLeader {
     this._followers = new LinkedList<IVersionFollower>();
 
     this.disposeWithMe(this.onDirty(() => this._followers.forEach((v) => v.markDirty())));
+    // The snapshot points back here, so holding it past disposal would keep this leader's last
+    // recorded state alive for no reason.
+    this.disposeWithMe(() => void (this._trackedSnapshot = null));
   }
 
   get version(): number {
@@ -46,6 +51,15 @@ export class VersionLeader extends DirtyMarkable implements IVersionLeader {
     }
 
     return this._versionNotifier.value;
+  }
+
+  trackedBy(token: number): ISnapshot<IVersionLeader> | null {
+    return this._trackToken === token ? this._trackedSnapshot : null;
+  }
+
+  markTracked(token: number, snapshot: ISnapshot<IVersionLeader>): void {
+    this._trackToken = token;
+    this._trackedSnapshot = snapshot;
   }
 
   appendFollower(follower: IVersionFollower): () => void {

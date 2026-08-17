@@ -272,6 +272,71 @@ describe('memo', () => {
     expect(runs).toBe(3);
   });
 
+  test('dropping several dependencies at once releases every one of them', () => {
+    const flag = signal(true);
+    const a = signal(1);
+    const b = signal(2);
+    const c = signal(3);
+
+    let runs = 0;
+    const m = memo(() => {
+      runs++;
+      return flag() ? a() + b() + c() : 0;
+    });
+
+    expect(m()).toBe(6);
+
+    const followers = (s: unknown) => (s as { leader: { ['_followers']: { size: number } } }).leader['_followers'].size;
+    expect([followers(a), followers(b), followers(c)]).toEqual([1, 1, 1]);
+
+    // One run drops three dependencies at once, so all three subscriptions have to go - not
+    // just the first stale slot.
+    flag(false);
+    expect(m()).toBe(0);
+    expect([followers(a), followers(b), followers(c)]).toEqual([0, 0, 0]);
+
+    // A leaked subscription would show up here as a recomputation triggered by a signal the
+    // memo no longer reads.
+    const before = runs;
+    b(999);
+    expect(m()).toBe(0);
+    expect(runs).toBe(before);
+
+    c(999);
+    expect(m()).toBe(0);
+    expect(runs).toBe(before);
+  });
+
+  test('reading one signal several times registers a single dependency', () => {
+    const s = signal(1);
+    const other = signal(100);
+    let runs = 0;
+
+    const m = memo(() => {
+      runs++;
+      // Same leader read repeatedly, and interleaved with another one so the repeats are not
+      // merely adjacent.
+      return s() + other() + s() + s();
+    });
+
+    expect(m()).toBe(103);
+
+    const connectors = (m as unknown as { manager: { toString(): string } }).manager as unknown as {
+      ['_list']: { size: number };
+    };
+    expect(connectors['_list'].size).toBe(2);
+    expect((s as unknown as { leader: { ['_followers']: { size: number } } }).leader['_followers'].size).toBe(1);
+
+    // Folding the repeats away must not cost any reactivity.
+    s(2);
+    expect(m()).toBe(106);
+    expect(runs).toBe(2);
+
+    other(200);
+    expect(m()).toBe(206);
+    expect(runs).toBe(3);
+  });
+
   test('a memo whose body reads itself reports the cycle, not a downstream symptom', () => {
     const m: IMemoValue<number> = memo(() => m() + 1);
 

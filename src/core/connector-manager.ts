@@ -1,6 +1,8 @@
 import { Disposable, ErrorScope, IDisposable, ILinkedList, ILinkedNode, isDisposable, LinkedList } from '../utils';
 import { globalScheduler } from './scheduler';
-import { IConnector, IConnectorManager, IVersionFollower, IVersionLeader } from './types';
+import { IConnector, IConnectorManager, ISnapshot, IVersionFollower, IVersionLeader } from './types';
+
+let trackTokenSeq = 0;
 
 export class ConnectorManager<T = void> extends Disposable implements IConnectorManager<T> {
   private _name?: string;
@@ -12,6 +14,7 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
   private _isExecuting: boolean;
   private _current: ILinkedNode<IConnector> | null;
   private _action: () => T;
+  private _trackToken = 0;
 
   constructor(follower: IVersionFollower, action: () => T, name?: string) {
     super();
@@ -63,6 +66,7 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
         if (this.isDisposed) return;
 
         this._current = this._list.head;
+        this._trackToken = ++trackTokenSeq;
 
         // Guards the action against re-entering *itself* - a memo whose body reads its own
         // value, or two memos reading each other. The window is deliberately just the action:
@@ -76,10 +80,16 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
         // Same for the action itself - disposing mid-run is a lifecycle event, not an error.
         if (this.isDisposed) return;
 
-        if (this._current) {
+        // Slots the action did not claim this time belong to dependencies it no longer reads.
+        // `next` is captured before the node is released: `removeSelf` hands it back to the
+        // pool, which nulls its links, so reading `next` afterwards would end this loop after a
+        // single node - or follow a pointer into whatever list reclaimed it.
+        while (this._current) {
+          const next = this._current.next;
+
           this._current.value.unsubscribe();
           this._current.removeSelf();
-          this._current = this._current.next;
+          this._current = next;
         }
       },
       () => {
@@ -98,29 +108,41 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
     // lifecycle event into an exception raised inside user code.
     if (this.isDisposed) return;
 
-    try {
-      if (!this._current) {
-        this._current = this._list.append({
-          snapshot: { instance: leader, version: leader.confirm() },
-          unsubscribe: leader.appendFollower(this._follower),
-        });
-        return;
-      }
+    const current = this._current;
 
-      const { snapshot, unsubscribe } = this._current.value;
-      if (snapshot.instance === leader) {
-        snapshot.version = leader.confirm();
-        return;
-      }
-
-      unsubscribe();
-      this._current.value = {
-        snapshot: { instance: leader, version: leader.confirm() },
-        unsubscribe: leader.appendFollower(this._follower),
-      };
-    } finally {
-      this._current = this._current?.next ?? null;
+    // A leader already tracked by *this* run is one dependency however many times it is read,
+    // so the repeat is folded into the slot the first read claimed and no cursor moves.
+    const tracked = leader.trackedBy(this._trackToken);
+    if (tracked) {
+      tracked.version = leader.confirm();
+      return;
     }
+
+    // Slots are matched by read order, so a stable dependency set lands here every time.
+    if (current && current.value.snapshot.instance === leader) {
+      const { snapshot } = current.value;
+
+      snapshot.version = leader.confirm();
+      leader.markTracked(this._trackToken, snapshot);
+      this._current = current.next;
+      return;
+    }
+
+    if (!current) {
+      const snapshot: ISnapshot<IVersionLeader> = { instance: leader, version: leader.confirm() };
+
+      this._list.append({ snapshot, unsubscribe: leader.appendFollower(this._follower) });
+      leader.markTracked(this._trackToken, snapshot);
+      this._current = null;
+      return;
+    }
+
+    current.value.unsubscribe();
+    const snapshot: ISnapshot<IVersionLeader> = { instance: leader, version: leader.confirm() };
+
+    current.value = { snapshot, unsubscribe: leader.appendFollower(this._follower) };
+    leader.markTracked(this._trackToken, snapshot);
+    this._current = current.next;
   }
 
   adopt(disposable: IDisposable | (() => void)): void {

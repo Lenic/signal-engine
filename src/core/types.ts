@@ -46,7 +46,23 @@ export interface IVersionLeaderOptions extends IObjectOptions {
   confirm?: (leader: IVersionLeader) => boolean;
 }
 
-export interface IVersionLeader extends IDirtyMarkable, IVersioned, IDisposable {
+/**
+ * Remembers which run last took this object as a dependency. A run identifies itself with a
+ * token unique for its lifetime, which is what lets a second read inside that same run be
+ * recognised - and folded into the slot the first read already claimed - in constant time.
+ */
+export interface ITrackMarkable {
+  /**
+   * The snapshot the given run already recorded here, or `null` if that run has not read this
+   * object yet.
+   */
+  trackedBy(token: number): ISnapshot<IVersionLeader> | null;
+
+  /** Records that the given run has taken this object as a dependency. */
+  markTracked(token: number, snapshot: ISnapshot<IVersionLeader>): void;
+}
+
+export interface IVersionLeader extends IDirtyMarkable, IVersioned, ITrackMarkable, IDisposable {
   confirm(): number;
   appendFollower(follower: IVersionFollower): () => void;
 }
