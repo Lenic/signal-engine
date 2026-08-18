@@ -29,9 +29,13 @@
     "dev": "tsdown --watch",
     "test": "vitest run",
     "test:w": "vitest",
-    "test:dev": "vitest run --inspect-brk --no-file-parallelism"
+    "test:dev": "vitest run --inspect-brk --no-file-parallelism",
+    "bench": "pnpm build && node --expose-gc bench/index.mjs"
   },
   "devDependencies": {
+    "@preact/signals-core": "^1.14.4",
+    "@vue/reactivity": "^3.5.41",
+    "alien-signals": "^3.2.1",
     "reactive-framework-test-suite": "^0.0.2",
     "tsdown": "^0.21.7",
     "typescript": "^6.0.2",
