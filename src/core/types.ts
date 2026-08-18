@@ -9,13 +9,16 @@ export interface IDirtyMarkable extends IDisposable {
   readonly isDirty: boolean;
 
   markDirty(): void;
+
+  /**
+   * Registers the one listener this object notifies when it turns dirty, and hands back a
+   * function that removes it again. Fires straight away if the object is already dirty.
+   *
+   * Deliberately single-listener: every dependency in this engine has exactly one interested
+   * party, and quietly replacing an existing listener would drop updates without a trace.
+   * Subscribing while a listener is registered throws.
+   */
   onDirty(callback: () => void): () => void;
-}
-
-export interface IVersioned extends IDisposable {
-  readonly version: number;
-
-  onVersionChanged(callback: (version: number) => void): () => void;
 }
 
 export interface ISchedulable extends IDisposable {
@@ -24,6 +27,12 @@ export interface ISchedulable extends IDisposable {
 
   markScheduled(): void;
   clearScheduled(): void;
+
+  /**
+   * Registers the one listener notified when the scheduled state flips, and hands back a
+   * function that removes it again. Single-listener for the same reason as `onDirty`;
+   * subscribing while a listener is registered throws.
+   */
   onScheduleChange(listener: (scheduled: boolean) => void): () => void;
 }
 
@@ -62,7 +71,14 @@ export interface ITrackMarkable {
   markTracked(token: number, snapshot: ISnapshot<IVersionLeader>): void;
 }
 
-export interface IVersionLeader extends IDirtyMarkable, IVersioned, ITrackMarkable, IDisposable {
+export interface IVersionLeader extends IDirtyMarkable, ITrackMarkable, IDisposable {
+  /**
+   * Increments whenever a confirmation finds this leader's value actually moved. Readers record
+   * it alongside the dependency and compare later, which is how an unchanged value stops
+   * propagation without anyone recomputing.
+   */
+  readonly version: number;
+
   confirm(): number;
   appendFollower(follower: IVersionFollower): () => void;
 }

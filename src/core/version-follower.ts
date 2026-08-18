@@ -7,6 +7,6 @@ export class VersionFollower extends DirtyMarkable implements IVersionFollower {
   }
 
   clearDirty(): void {
-    this._dirtyNotifier.notify(false);
+    this._isDirty = false;
   }
 }

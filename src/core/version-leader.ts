@@ -1,6 +1,5 @@
-import { ILinkedList, ILinkedNode, IStateNotifier, LinkedList, StateNotifier } from '../utils';
+import { ILinkedList, ILinkedNode, LinkedList } from '../utils';
 import { DirtyMarkable } from './dirty-markable';
-import { globalScheduler } from './scheduler';
 import { ISnapshot, IVersionFollower, IVersionLeader, IVersionLeaderOptions } from './types';
 
 const defaultConfirmAction = () => true;
@@ -8,8 +7,8 @@ const defaultConfirmAction = () => true;
 export class VersionLeader extends DirtyMarkable implements IVersionLeader {
   private _trackToken = 0;
   private _trackedSnapshot: ISnapshot<IVersionLeader> | null = null;
+  private _version = 0;
   private _versionConfirmer: (leader: IVersionLeader) => boolean;
-  private _versionNotifier: IStateNotifier<number>;
   private _followers: ILinkedList<IVersionFollower>;
 
   constructor(options: IVersionLeaderOptions) {
@@ -17,25 +16,25 @@ export class VersionLeader extends DirtyMarkable implements IVersionLeader {
 
     this._versionConfirmer = options.confirm ?? defaultConfirmAction;
 
-    this._versionNotifier = new StateNotifier(0, {
-      name: options.name ? `version-notifier-${options.name}` : undefined,
-    });
     this._followers = new LinkedList<IVersionFollower>();
 
-    this.disposeWithMe(this.onDirty(() => this._followers.forEach((v) => v.markDirty())));
     // The snapshot points back here, so holding it past disposal would keep this leader's last
     // recorded state alive for no reason.
     this.disposeWithMe(() => void (this._trackedSnapshot = null));
   }
 
-  get version(): number {
-    return this._versionNotifier.value;
+  /**
+   * Propagating to followers is what a leader *is*, not something subscribed to it - keeping it
+   * out of the listener slot leaves that slot free for an actual observer.
+   */
+  protected notifyDirty(): void {
+    this._followers.forEach((v) => v.markDirty());
+
+    super.notifyDirty();
   }
 
-  onVersionChanged(callback: (version: number) => void): () => void {
-    this.checkDisposed();
-
-    return this._versionNotifier.subscribe(callback);
+  get version(): number {
+    return this._version;
   }
 
   confirm(): number {
@@ -44,13 +43,15 @@ export class VersionLeader extends DirtyMarkable implements IVersionLeader {
     // that. Clearing afterwards would wipe that fresh dirt along with the old one, and the
     // leader would stay permanently "clean" while its sources had already moved on.
     const wasDirty = this.isDirty;
-    this._dirtyNotifier.notify(false);
+    this._isDirty = false;
 
+    // Nobody observes the version - it is polled by readers holding a recorded copy - so moving
+    // it needs no notification, and therefore no batch to collect one.
     if (!this.isDisposed && wasDirty && this._versionConfirmer(this)) {
-      globalScheduler.runBatched(() => this._versionNotifier.notify(this._versionNotifier.value + 1));
+      this._version += 1;
     }
 
-    return this._versionNotifier.value;
+    return this._version;
   }
 
   trackedBy(token: number): ISnapshot<IVersionLeader> | null {
