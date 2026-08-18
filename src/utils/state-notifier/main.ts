@@ -31,6 +31,18 @@ export class StateNotifier<T> extends Disposable implements IStateNotifier<T> {
   notify(value: T): void {
     if (!this._comparer.setValue(value)) return;
 
+    const head = this._subscribers.head;
+    if (!head) return;
+
+    // An error scope exists to keep one listener's failure from swallowing the rest. With a
+    // single listener there is no rest, and the scope would only catch the error to rethrow it
+    // unchanged - so the common shapes in this engine (a leader with one follower, a version
+    // nobody observes) skip it entirely.
+    if (head === this._subscribers.tail) {
+      head.value(value);
+      return;
+    }
+
     ErrorScope.getInstance().run((context) => this._subscribers.forEach((v) => context.capture(() => v(value))));
   }
 

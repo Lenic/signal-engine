@@ -47,7 +47,7 @@ export class VersionLeader extends DirtyMarkable implements IVersionLeader {
     this._dirtyNotifier.notify(false);
 
     if (!this.isDisposed && wasDirty && this._versionConfirmer(this)) {
-      globalScheduler.batch(() => this._versionNotifier.notify(this._versionNotifier.value + 1));
+      globalScheduler.runBatched(() => this._versionNotifier.notify(this._versionNotifier.value + 1));
     }
 
     return this._versionNotifier.value;

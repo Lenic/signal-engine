@@ -9,7 +9,7 @@ function releaseScopeInstance(instance: IErrorScope) {
   }
 }
 
-export class ErrorScope implements IErrorScope {
+export class ErrorScope implements IErrorScope, IErrorScopeContext {
   private list: unknown[];
 
   static getInstance(): IErrorScope {
@@ -27,19 +27,24 @@ export class ErrorScope implements IErrorScope {
     this.list = [];
   }
 
-  run(callback: (context: IErrorScopeContext) => void, finalize?: () => void): void {
-    const context: IErrorScopeContext = {
-      push: (error: any) => this.list.push(error),
-      capture: (action) => {
-        try {
-          action();
-        } catch (e) {
-          this.list.push(e);
-        }
-      },
-    };
+  push(error: unknown): void {
+    this.list.push(error);
+  }
+
+  capture(action: () => void): void {
     try {
-      callback(context);
+      action();
+    } catch (e) {
+      this.list.push(e);
+    }
+  }
+
+  // The scope hands itself out as the context rather than building one per call: `run` sits on
+  // the hottest path in the engine, and a fresh object plus two closures on every invocation was
+  // most of what it cost.
+  run(callback: (context: IErrorScopeContext) => void, finalize?: () => void): void {
+    try {
+      callback(this);
     } catch (e) {
       this.list.push(e);
     } finally {
@@ -49,7 +54,12 @@ export class ErrorScope implements IErrorScope {
         this.list.push(e);
       }
 
-      if (!this.list.length) return;
+      // Returned to the store on the way out either way. Releasing only on the failing path -
+      // as this used to - left the store permanently empty, so every `getInstance` allocated.
+      if (!this.list.length) {
+        releaseScopeInstance(this);
+        return;
+      }
 
       try {
         if (this.list.length === 1) {

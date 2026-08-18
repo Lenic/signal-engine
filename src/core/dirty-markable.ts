@@ -23,7 +23,7 @@ export class DirtyMarkable extends Disposable implements IDirtyMarkable {
 
   markDirty(): void {
     if (!this._dirtyNotifier.value) {
-      globalScheduler.batch(() => this._dirtyNotifier.notify(true));
+      globalScheduler.runBatched(() => this._dirtyNotifier.notify(true));
     }
   }
 

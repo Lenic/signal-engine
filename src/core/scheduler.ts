@@ -7,6 +7,16 @@ export const globalScheduler: IScheduler = {
   isRunning: false,
   pendingSignalUpdateList: new LinkedList<IPendingSignalUpdate>(),
   scheduledConnectorManagerList: new LinkedList<IConnectorManager>(),
+  runBatched(action: () => void): void {
+    // A nested batch adds nothing: it raises and lowers the same counter, restores `isRunning`
+    // from true back to true, skips the flush loop outright, and its error scope only catches
+    // an error to rethrow it. Whenever `isRunning` holds, a batch is already open around us -
+    // it is set in `batch` itself and in `ConnectorManager.run` immediately before it opens one
+    // - so running the action directly keeps the same guarantees for a fraction of the cost.
+    if (this.isRunning) return void action();
+
+    this.batch(action);
+  },
   settlePendingWrites(): void {
     // Nothing queued is by far the common case - outside a batch this list is always empty -
     // so the check keeps this affordable on a read path.

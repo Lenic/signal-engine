@@ -114,6 +114,14 @@ export interface IScheduler {
   batch(action: (context: IErrorScopeContext) => void, finalize?: () => void): void;
 
   /**
+   * Runs an action with the guarantee that a batch is open around it, opening one only when
+   * there is not already one running. Meant for callers that just need their notifications to
+   * be collected and flushed - not for anything that needs to isolate failures of its own, which
+   * has to go through `batch` and use the error scope it hands out.
+   */
+  runBatched(action: () => void): void;
+
+  /**
    * Applies every write the running batch has queued so far. A write takes effect on the value
    * immediately but publishes its dirt at flush time, so a read that travels *through* the
    * graph - rather than straight off a signal - has to settle those writes first, or it answers
