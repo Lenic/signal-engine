@@ -11,14 +11,14 @@ export interface IDirtyMarkable extends IDisposable {
   markDirty(): void;
 
   /**
-   * Registers the one listener this object notifies when it turns dirty, and hands back a
-   * function that removes it again. Fires straight away if the object is already dirty.
+   * Callback invoked when this object turns dirty
    *
-   * Deliberately single-listener: every dependency in this engine has exactly one interested
-   * party, and quietly replacing an existing listener would drop updates without a trace.
-   * Subscribing while a listener is registered throws.
+   * - assign to listen, set to null to stop listening
+   * - a single slot, because every dependency here has exactly one interested party
+   * - fires on the transition into dirty only, never on a mark that changes nothing
+   * - set to null on disposal
    */
-  onDirty(callback: () => void): () => void;
+  onDirty: (() => void) | null;
 }
 
 export interface ISchedulable extends IDisposable {
@@ -29,11 +29,14 @@ export interface ISchedulable extends IDisposable {
   clearScheduled(): void;
 
   /**
-   * Registers the one listener notified when the scheduled state flips, and hands back a
-   * function that removes it again. Single-listener for the same reason as `onDirty`;
-   * subscribing while a listener is registered throws.
+   * Callback invoked when the scheduled state flips
+   *
+   * - assign to listen, set to null to stop listening
+   * - a single slot, for the same reason as `onDirty`
+   * - fires on an actual flip only, so re-marking a scheduled task reports nothing
+   * - set to null on disposal
    */
-  onScheduleChange(listener: (scheduled: boolean) => void): () => void;
+  onScheduleChange: ((scheduled: boolean) => void) | null;
 }
 
 export interface IVersionFollowerOptions extends IObjectOptions {

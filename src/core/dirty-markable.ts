@@ -6,14 +6,14 @@ export class DirtyMarkable extends Disposable implements IDirtyMarkable {
   protected _name?: string;
   protected _isDirty: boolean;
 
-  private _listener: (() => void) | null;
+  onDirty: (() => void) | null;
 
   constructor(isDirty: boolean, name?: string) {
     super();
 
     this._name = name;
     this._isDirty = isDirty;
-    this._listener = null;
+    this.onDirty = null;
   }
 
   get name(): string | undefined {
@@ -32,36 +32,18 @@ export class DirtyMarkable extends Disposable implements IDirtyMarkable {
     globalScheduler.runBatched(() => this.notifyDirty());
   }
 
-  onDirty(callback: () => void): () => void {
-    if (this._listener) {
-      throw new Error(`[DirtyMarkable]: ${this._name ?? 'this object'} already has a dirty listener.`);
-    }
-
-    this._listener = callback;
-
-    if (this._isDirty) {
-      callback();
-    }
-
-    return () => {
-      if (this._listener === callback) {
-        this._listener = null;
-      }
-    };
-  }
-
   /**
    * What this object does the moment it turns dirty. Subclasses override to add their own
    * propagation and call `super` so the registered listener still runs.
    */
   protected notifyDirty(): void {
-    this._listener?.();
+    this.onDirty?.();
   }
 
   dispose() {
     if (this.isDisposed) return;
 
     super.dispose();
-    this._listener = null;
+    this.onDirty = null;
   }
 }

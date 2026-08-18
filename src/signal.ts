@@ -22,7 +22,7 @@ export function signal<T>(initialValue: T, options?: ISignalOptions<T>): ISignal
   let updater: IPendingSignalValueUpdate<T> | null = null;
   let pendingValue: T | typeof defaultPendingValue = defaultPendingValue;
 
-  task.onScheduleChange((scheduled) => {
+  task.onScheduleChange = (scheduled) => {
     if (!scheduled) return;
 
     if (pendingValue === defaultPendingValue) {
@@ -45,7 +45,7 @@ export function signal<T>(initialValue: T, options?: ISignalOptions<T>): ISignal
 
     pendingValue = defaultPendingValue;
     globalScheduler.pendingSignalUpdateList.append(updater);
-  });
+  };
 
   function signal_getter(...args: any[]): any {
     // No arguments: act as getter

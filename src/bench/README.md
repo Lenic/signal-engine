@@ -6,7 +6,7 @@ Compares `@lenic/signal` against three mature reactive cores on the same set of 
 pnpm bench
 ```
 
-That builds the package and runs `bench/index.mjs` against `dist/`, so the numbers describe the
+That builds the package and runs `src/bench/index.mjs` against `dist/`, so the numbers describe the
 artifact that actually ships.
 
 ## What it measures

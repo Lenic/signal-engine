@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'vitest';
-import { Schedulable } from './schedulable';
+import { Schedulable } from '../core/schedulable';
 
 describe('Schedulable', () => {
   test('the listener sees each flip of the scheduled state', () => {
     const task = new Schedulable();
     const seen: boolean[] = [];
 
-    task.onScheduleChange((scheduled) => seen.push(scheduled));
+    task.onScheduleChange = (scheduled) => void seen.push(scheduled);
     expect(task.isScheduled).toBe(false);
 
     task.markScheduled();
@@ -24,7 +24,7 @@ describe('Schedulable', () => {
     const task = new Schedulable();
     const seen: boolean[] = [];
 
-    task.onScheduleChange((scheduled) => seen.push(scheduled));
+    task.onScheduleChange = (scheduled) => void seen.push(scheduled);
 
     task.markScheduled();
     task.markScheduled();
@@ -36,39 +36,37 @@ describe('Schedulable', () => {
     expect(seen).toEqual([true, false]);
   });
 
-  test('a second listener is refused rather than silently replacing the first', () => {
-    const task = new Schedulable('flush');
+  test('a task with no listener still tracks its own state', () => {
+    const task = new Schedulable();
+
+    expect(() => task.markScheduled()).not.toThrow();
+    expect(task.isScheduled).toBe(true);
+
+    task.clearScheduled();
+    expect(task.isScheduled).toBe(false);
+  });
+
+  test('clearing the listener stops the notifications', () => {
+    const task = new Schedulable();
     const seen: boolean[] = [];
 
-    task.onScheduleChange((scheduled) => seen.push(scheduled));
-
-    expect(() => task.onScheduleChange(() => {})).toThrow('flush');
-
+    task.onScheduleChange = (scheduled) => void seen.push(scheduled);
     task.markScheduled();
+
+    task.onScheduleChange = null;
+    task.clearScheduled();
+
     expect(seen).toEqual([true]);
   });
 
-  test('unsubscribing frees the slot for a new listener', () => {
-    const task = new Schedulable();
-    const first: boolean[] = [];
-    const second: boolean[] = [];
-
-    const unsubscribe = task.onScheduleChange((scheduled) => first.push(scheduled));
-    unsubscribe();
-
-    expect(() => task.onScheduleChange((scheduled) => second.push(scheduled))).not.toThrow();
-
-    task.markScheduled();
-    expect(first).toEqual([]);
-    expect(second).toEqual([true]);
-  });
-
-  test('a disposed task stops reporting', () => {
+  test('a disposed task drops its listener and stops reporting', () => {
     const task = new Schedulable();
     const seen: boolean[] = [];
 
-    task.onScheduleChange((scheduled) => seen.push(scheduled));
+    task.onScheduleChange = (scheduled) => void seen.push(scheduled);
     task.dispose();
+
+    expect(task.onScheduleChange).toBeNull();
 
     task.markScheduled();
     expect(seen).toEqual([]);

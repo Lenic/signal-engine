@@ -7,10 +7,10 @@ export function memo<T>(fn: () => T, options?: ISignalOptions<T>): IMemoValue<T>
   const comparer = new EqualComparer<T>();
 
   const follower = new VersionFollower({ name: options?.name ? `memo-follower-${options?.name}` : undefined });
-  follower.onDirty(() => {
+  follower.onDirty = () => {
     follower.clearDirty();
     leader.markDirty();
-  });
+  };
 
   const manager = new ConnectorManager<boolean>(
     follower,

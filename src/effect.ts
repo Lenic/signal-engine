@@ -52,7 +52,7 @@ export function effect(action: IEffectAction, options?: IObjectOptions): IEffect
   // execution is still tracked by its owner instead of leaking.
   owner?.adopt(dispose);
 
-  task.onScheduleChange((scheduled) => {
+  task.onScheduleChange = (scheduled) => {
     if (scheduled) {
       node = globalScheduler.scheduledConnectorManagerList.append(manager);
       // Leaving the queue *is* the scheduled run being consumed, and that happens whether or
@@ -66,9 +66,9 @@ export function effect(action: IEffectAction, options?: IObjectOptions): IEffect
     } else {
       node = null;
     }
-  });
+  };
 
-  follower.onDirty(() => {
+  follower.onDirty = () => {
     follower.clearDirty();
 
     if (globalScheduler.isRunning) {
@@ -76,7 +76,7 @@ export function effect(action: IEffectAction, options?: IObjectOptions): IEffect
     } else {
       manager.run();
     }
-  });
+  };
 
   // The first execution belongs to `effect()` itself, not to the scheduler: by the time this
   // returns, the body has run and its dependencies are subscribed. Batching only governs

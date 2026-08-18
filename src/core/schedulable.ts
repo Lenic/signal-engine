@@ -4,14 +4,15 @@ import { ISchedulable } from './types';
 export class Schedulable extends Disposable implements ISchedulable {
   private _name?: string;
   private _isScheduled: boolean;
-  private _listener: ((scheduled: boolean) => void) | null;
+
+  onScheduleChange: ((scheduled: boolean) => void) | null;
 
   constructor(name?: string) {
     super();
 
     this._name = name;
     this._isScheduled = false;
-    this._listener = null;
+    this.onScheduleChange = null;
   }
 
   get name(): string | undefined {
@@ -28,34 +29,20 @@ export class Schedulable extends Disposable implements ISchedulable {
     if (this._isScheduled) return;
 
     this._isScheduled = true;
-    this._listener?.(true);
+    this.onScheduleChange?.(true);
   }
 
   clearScheduled(): void {
     if (!this._isScheduled) return;
 
     this._isScheduled = false;
-    this._listener?.(false);
-  }
-
-  onScheduleChange(listener: (scheduled: boolean) => void): () => void {
-    if (this._listener) {
-      throw new Error(`[Schedulable]: ${this._name ?? 'this object'} already has a schedule listener.`);
-    }
-
-    this._listener = listener;
-
-    return () => {
-      if (this._listener === listener) {
-        this._listener = null;
-      }
-    };
+    this.onScheduleChange?.(false);
   }
 
   dispose() {
     if (this.isDisposed) return;
 
     super.dispose();
-    this._listener = null;
+    this.onScheduleChange = null;
   }
 }

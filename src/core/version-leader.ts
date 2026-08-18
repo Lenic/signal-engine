@@ -9,18 +9,15 @@ export class VersionLeader extends DirtyMarkable implements IVersionLeader {
   private _trackedSnapshot: ISnapshot<IVersionLeader> | null = null;
   private _version = 0;
   private _versionConfirmer: (leader: IVersionLeader) => boolean;
-  private _followers: ILinkedList<IVersionFollower>;
+  // Allocated on the first follower. A signal nobody reads never grows one.
+  private _followers: ILinkedList<IVersionFollower> | null;
 
   constructor(options: IVersionLeaderOptions) {
     super(options.isDirty, options.name);
 
     this._versionConfirmer = options.confirm ?? defaultConfirmAction;
 
-    this._followers = new LinkedList<IVersionFollower>();
-
-    // The snapshot points back here, so holding it past disposal would keep this leader's last
-    // recorded state alive for no reason.
-    this.disposeWithMe(() => void (this._trackedSnapshot = null));
+    this._followers = null;
   }
 
   /**
@@ -28,7 +25,7 @@ export class VersionLeader extends DirtyMarkable implements IVersionLeader {
    * out of the listener slot leaves that slot free for an actual observer.
    */
   protected notifyDirty(): void {
-    this._followers.forEach((v) => v.markDirty());
+    this._followers?.forEach((v) => v.markDirty());
 
     super.notifyDirty();
   }
@@ -66,7 +63,8 @@ export class VersionLeader extends DirtyMarkable implements IVersionLeader {
   appendFollower(follower: IVersionFollower): () => void {
     this.checkDisposed();
 
-    let node: ILinkedNode<IVersionFollower> | null = this._followers.append(follower);
+    const followers = (this._followers ??= new LinkedList<IVersionFollower>());
+    let node: ILinkedNode<IVersionFollower> | null = followers.append(follower);
 
     node.onRemoved = () => void (node = null);
     return () => node?.removeSelf();

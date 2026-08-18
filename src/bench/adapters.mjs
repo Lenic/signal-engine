@@ -2,7 +2,7 @@ import * as alien from 'alien-signals';
 import * as preact from '@preact/signals-core';
 import * as vue from '@vue/reactivity';
 
-import * as lenic from '../dist/index.mjs';
+import * as lenic from '../../dist/index.mjs';
 
 /**
  * Every library is driven through the same shape, so a scenario is written once and each
