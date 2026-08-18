@@ -4,6 +4,12 @@ import { effect } from '../effect';
 import { memo } from '../memo';
 import type { IMemoValue } from '../types';
 
+/** Reaches past the public surface to assert on the dependency graph a memo actually built. */
+const connectorCount = (m: IMemoValue<unknown>) =>
+  (m as unknown as { manager: { ['_list']: { size: number } } }).manager['_list'].size;
+const followerCount = (s: unknown) => (s as { leader: { ['_followers']: { size: number } } }).leader['_followers'].size;
+const managerOf = (m: IMemoValue<unknown>) => (m as unknown as { manager: { disconnect(): void } }).manager;
+
 describe('memo', () => {
   test('basic computation', () => {
     const a = signal(1);
@@ -286,14 +292,13 @@ describe('memo', () => {
 
     expect(m()).toBe(6);
 
-    const followers = (s: unknown) => (s as { leader: { ['_followers']: { size: number } } }).leader['_followers'].size;
-    expect([followers(a), followers(b), followers(c)]).toEqual([1, 1, 1]);
+    expect([followerCount(a), followerCount(b), followerCount(c)]).toEqual([1, 1, 1]);
 
     // One run drops three dependencies at once, so all three subscriptions have to go - not
     // just the first stale slot.
     flag(false);
     expect(m()).toBe(0);
-    expect([followers(a), followers(b), followers(c)]).toEqual([0, 0, 0]);
+    expect([followerCount(a), followerCount(b), followerCount(c)]).toEqual([0, 0, 0]);
 
     // A leaked subscription would show up here as a recomputation triggered by a signal the
     // memo no longer reads.
@@ -321,11 +326,8 @@ describe('memo', () => {
 
     expect(m()).toBe(103);
 
-    const connectors = (m as unknown as { manager: { toString(): string } }).manager as unknown as {
-      ['_list']: { size: number };
-    };
-    expect(connectors['_list'].size).toBe(2);
-    expect((s as unknown as { leader: { ['_followers']: { size: number } } }).leader['_followers'].size).toBe(1);
+    expect(connectorCount(m)).toBe(2);
+    expect(followerCount(s)).toBe(1);
 
     // Folding the repeats away must not cost any reactivity.
     s(2);
@@ -335,6 +337,62 @@ describe('memo', () => {
     other(200);
     expect(m()).toBe(206);
     expect(runs).toBe(3);
+  });
+
+  test('a memo that disposes its reader while being read for the first time', () => {
+    const flag = signal(false);
+    const s = signal(0);
+    let disposeReader: (() => void) | undefined;
+
+    // Computing `a` disposes whoever is reading it. The read sits on a branch the effect only
+    // takes later, so `a` gets tracked for the first time from inside the action - the one path
+    // where confirming re-enters user code while a dependency slot is being claimed.
+    const a = memo(() => {
+      if (s() === 1) disposeReader?.();
+
+      return s();
+    });
+
+    let runs = 0;
+    disposeReader = effect(() => {
+      runs++;
+      if (flag()) a();
+    });
+
+    expect(runs).toBe(1);
+
+    s(1); // `a` is dirty now, but the effect does not depend on it yet
+
+    expect(() => flag(true)).not.toThrow();
+    expect(runs).toBe(2);
+
+    // It disposed itself mid-read, so nothing may reach it any more.
+    flag(false);
+    s(2);
+    expect(runs).toBe(2);
+  });
+
+  test('a read arriving after the dependency table is severed claims a fresh slot', () => {
+    const s = signal(1);
+    let m!: IMemoValue<number>;
+
+    m = memo(() => {
+      const first = s();
+
+      // Severing mid-run retires the slot the first read claimed. The second read must not fold
+      // itself into that orphan, or the dependency would be dropped without a trace.
+      managerOf(m).disconnect();
+
+      return first + s();
+    });
+
+    expect(m()).toBe(2);
+    expect(connectorCount(m)).toBe(1);
+    expect(followerCount(s)).toBe(1);
+
+    // A lost subscription would leave this stuck at 2.
+    s(5);
+    expect(m()).toBe(10);
   });
 
   test('a memo whose body reads itself reports the cycle, not a downstream symptom', () => {

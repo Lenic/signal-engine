@@ -114,22 +114,30 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
     // so the repeat is folded into the slot the first read claimed and no cursor moves.
     const tracked = leader.trackedBy(this._trackToken);
     if (tracked) {
-      tracked.version = leader.confirm();
+      const version = this.confirmWhileAlive(leader);
+      if (version === null) return;
+
+      tracked.version = version;
       return;
     }
 
     // Slots are matched by read order, so a stable dependency set lands here every time.
     if (current && current.value.snapshot.instance === leader) {
       const { snapshot } = current.value;
+      const version = this.confirmWhileAlive(leader);
+      if (version === null) return;
 
-      snapshot.version = leader.confirm();
+      snapshot.version = version;
       leader.markTracked(this._trackToken, snapshot);
       this._current = current.next;
       return;
     }
 
     if (!current) {
-      const snapshot: ISnapshot<IVersionLeader> = { instance: leader, version: leader.confirm() };
+      const version = this.confirmWhileAlive(leader);
+      if (version === null) return;
+
+      const snapshot: ISnapshot<IVersionLeader> = { instance: leader, version };
 
       this._list.append({ snapshot, unsubscribe: leader.appendFollower(this._follower) });
       leader.markTracked(this._trackToken, snapshot);
@@ -138,11 +146,28 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
     }
 
     current.value.unsubscribe();
-    const snapshot: ISnapshot<IVersionLeader> = { instance: leader, version: leader.confirm() };
+    const version = this.confirmWhileAlive(leader);
+    if (version === null) return;
+
+    const snapshot: ISnapshot<IVersionLeader> = { instance: leader, version };
 
     current.value = { snapshot, unsubscribe: leader.appendFollower(this._follower) };
     leader.markTracked(this._trackToken, snapshot);
     this._current = current.next;
+  }
+
+  /**
+   * Confirms a leader's version, reporting `null` when confirming tore this manager down.
+   *
+   * Every branch of `track` has to route through here: confirming re-enters user code - a memo
+   * body - which is free to dispose whoever is reading it. Past that point `_list` is gone and
+   * the cursor's node has been handed back to the pool, so claiming a slot would either throw
+   * or write into whatever list has since reclaimed that node.
+   */
+  private confirmWhileAlive(leader: IVersionLeader): number | null {
+    const version = leader.confirm();
+
+    return this.isDisposed ? null : version;
   }
 
   adopt(disposable: IDisposable | (() => void)): void {
@@ -154,6 +179,11 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
   }
 
   disconnect(): void {
+    // Every mark this manager handed out points at a slot that is about to vanish. Taking a
+    // fresh token retires them all at once, so a read arriving afterwards cannot fold itself
+    // into an orphaned snapshot - it claims a real slot and subscribes again.
+    this._trackToken = ++trackTokenSeq;
+
     this._list.clear((v) => v.unsubscribe());
   }
 
