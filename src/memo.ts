@@ -40,6 +40,12 @@ export function memo<T>(fn: () => T, options?: ISignalOptions<T>): IMemoValue<T>
       throw new Error(`[memo]: circular dependency detected${options?.name ? ` in "${options.name}"` : ''}.`);
     }
 
+    // A batch applies its writes to the values right away but only publishes the resulting dirt
+    // when it flushes. Reading a signal directly therefore sees the batch's own writes, while
+    // reading through a memo would answer from a cache nothing has invalidated yet. Settling the
+    // queued writes first puts both kinds of read on the same footing.
+    globalScheduler.settlePendingWrites();
+
     globalScheduler.connectorManager?.track(leader);
 
     leader.confirm();

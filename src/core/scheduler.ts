@@ -7,6 +7,17 @@ export const globalScheduler: IScheduler = {
   isRunning: false,
   pendingSignalUpdateList: new LinkedList<IPendingSignalUpdate>(),
   scheduledConnectorManagerList: new LinkedList<IConnectorManager>(),
+  settlePendingWrites(): void {
+    // Nothing queued is by far the common case - outside a batch this list is always empty -
+    // so the check keeps this affordable on a read path.
+    if (this.pendingSignalUpdateList.size === 0) return;
+
+    // Each write is captured on its own, so one failing comparer cannot strand the writes
+    // queued behind it.
+    ErrorScope.getInstance().run((context) =>
+      this.pendingSignalUpdateList.clear((v) => context.capture(() => v.flush())),
+    );
+  },
   batch(action: (context: IErrorScopeContext) => void, finalize?: () => void): void {
     const previous = this.isRunning;
     this.isRunning = true;
@@ -28,13 +39,13 @@ export const globalScheduler: IScheduler = {
             // batch walk straight back into the same loop. Pending writes are still flushed, so
             // no signal is left with a wedged schedule; every queued recomputation is then
             // dropped, which also clears the schedule flag of each manager it holds.
-            this.pendingSignalUpdateList.clear((v) => context.capture(() => v.flush()));
+            context.capture(() => this.settlePendingWrites());
             this.scheduledConnectorManagerList.clear();
 
             throw new Error('[Scheduler]: Maximum flush iteration limit exceeded.');
           }
 
-          this.pendingSignalUpdateList.clear((v) => context.capture(() => v.flush()));
+          context.capture(() => this.settlePendingWrites());
           this.scheduledConnectorManagerList.clear((v) => context.capture(() => v.run()));
         }
       },

@@ -112,4 +112,12 @@ export interface IScheduler {
   scheduledConnectorManagerList: ILinkedList<IConnectorManager>;
 
   batch(action: (context: IErrorScopeContext) => void, finalize?: () => void): void;
+
+  /**
+   * Applies every write the running batch has queued so far. A write takes effect on the value
+   * immediately but publishes its dirt at flush time, so a read that travels *through* the
+   * graph - rather than straight off a signal - has to settle those writes first, or it answers
+   * from a cache the batch has already invalidated.
+   */
+  settlePendingWrites(): void;
 }

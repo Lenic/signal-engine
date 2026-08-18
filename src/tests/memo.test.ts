@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { globalScheduler } from '../core';
 import { signal } from '../signal';
 import { effect } from '../effect';
 import { memo } from '../memo';
@@ -337,6 +338,88 @@ describe('memo', () => {
     other(200);
     expect(m()).toBe(206);
     expect(runs).toBe(3);
+  });
+
+  test('a read inside a batch sees the writes that batch has already made', () => {
+    const src = signal(0);
+    const side = signal(0);
+
+    // The memo writes on the side, which is how the batch's own queue gets exercised from
+    // inside a computation as well.
+    const c = memo(() => {
+      const value = src();
+      side(value * 10);
+
+      return value;
+    });
+
+    expect(c()).toBe(0);
+
+    let effectRuns = 0;
+    effect(() => {
+      side();
+      effectRuns++;
+    });
+    effectRuns = 0;
+
+    globalScheduler.batch(() => {
+      src(5);
+
+      // Reading the signal directly has always seen `5` here; reading through the memo used to
+      // answer `0` from a cache the batch had already invalidated.
+      expect(src()).toBe(5);
+      expect(c()).toBe(5);
+      expect(side()).toBe(50);
+    });
+
+    expect(effectRuns).toBeGreaterThanOrEqual(1);
+    expect(side()).toBe(50);
+  });
+
+  test('a value read mid-batch and then changed again settles on the last write', () => {
+    const a = signal(1);
+    let runs = 0;
+
+    const doubled = memo(() => {
+      runs++;
+      return a() * 2;
+    });
+
+    expect(doubled()).toBe(2);
+    expect(runs).toBe(1);
+
+    globalScheduler.batch(() => {
+      a(5);
+      expect(doubled()).toBe(10); // observes the intermediate value
+
+      a(0); // ...and then moves on
+    });
+
+    // The mid-batch read must not leave the memo pinned to the value it saw.
+    expect(doubled()).toBe(0);
+    expect(runs).toBe(3);
+  });
+
+  test('a batch whose writes cancel out never invalidates anything', () => {
+    const a = signal(0);
+    let runs = 0;
+
+    const doubled = memo(() => {
+      runs++;
+      return a() * 2;
+    });
+
+    expect(doubled()).toBe(0);
+    runs = 0;
+
+    // No read inside the batch, so the writes stay queued and settle to a net change of zero.
+    globalScheduler.batch(() => {
+      a(5);
+      a(0);
+    });
+
+    expect(doubled()).toBe(0);
+    expect(runs).toBe(0);
   });
 
   test('a memo that disposes its reader while being read for the first time', () => {
