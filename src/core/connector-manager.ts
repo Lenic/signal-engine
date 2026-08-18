@@ -81,9 +81,9 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
         if (this.isDisposed) return;
 
         // Slots the action did not claim this time belong to dependencies it no longer reads.
-        // `next` is captured before the node is released: `removeSelf` hands it back to the
-        // pool, which nulls its links, so reading `next` afterwards would end this loop after a
-        // single node - or follow a pointer into whatever list reclaimed it.
+        // `next` is captured before the node goes: `removeSelf` scrubs its links, so reading
+        // `next` afterwards would always be `null` and the loop would drop a single node no
+        // matter how many the run left behind.
         while (this._current) {
           const next = this._current.next;
 
@@ -161,8 +161,8 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
    *
    * Every branch of `track` has to route through here: confirming re-enters user code - a memo
    * body - which is free to dispose whoever is reading it. Past that point `_list` is gone and
-   * the cursor's node has been handed back to the pool, so claiming a slot would either throw
-   * or write into whatever list has since reclaimed that node.
+   * the cursor points at a node that has already been scrubbed, so claiming a slot would throw
+   * or quietly record the dependency into an entry nothing owns any more.
    */
   private confirmWhileAlive(leader: IVersionLeader): number | null {
     const version = leader.confirm();
@@ -231,9 +231,9 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
     let node = this._list.head;
     while (node) {
       // `confirm()` re-enters user code - a memo body - which is free to dispose this very
-      // manager and hand every node of `_list` back to the pool. So everything this iteration
-      // still needs is read *before* that call, and disposal is checked *after* it: a node
-      // that has been released reports `undefined` as its value and `null` as its successor.
+      // manager and tear down every node of `_list`. So everything this iteration still needs
+      // is read *before* that call, and disposal is checked *after* it: a scrubbed node reports
+      // `undefined` as its value and `null` as its successor.
       const { snapshot } = node.value;
       const recordedVersion = snapshot.version;
       const next = node.next;
@@ -241,7 +241,7 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
       const hasChanged = snapshot.instance.confirm() !== recordedVersion;
 
       // Disposal outranks a pending change: once confirming has torn this manager down there
-      // is nothing left to recompute, and `next` now points into the pool.
+      // is nothing left to recompute, and `next` has been scrubbed to `null`.
       if (this.isDisposed) return false;
       if (hasChanged) return true;
 

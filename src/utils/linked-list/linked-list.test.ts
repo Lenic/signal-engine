@@ -53,21 +53,29 @@ describe('LinkedList (With Global Node Pooling)', () => {
     expect(listB.size).toBe(0);
   });
 
-  test('Object pool reuse: verify node recycling and reuse', () => {
+  test('A removed node is scrubbed and never handed to another list', () => {
     const list = new LinkedList<number>();
 
-    const node1 = list.append(10);
-    const node1Ref = node1;
-    node1.removeSelf();
-    expect(node1.value).toBeUndefined();
-    const node2 = list.append(20);
+    const removed = list.append(10);
+    removed.removeSelf();
 
-    expect(node2).toBe(node1Ref);
-    expect(node2.value).toBe(20);
+    // Nothing about the node survives removal, so a stale reference cannot be mistaken for a
+    // live entry.
+    expect(removed.value).toBeUndefined();
+    expect(removed.prev).toBeNull();
+    expect(removed.next).toBeNull();
+    expect(removed.onRemoved).toBeNull();
+
+    const fresh = list.append(20);
+
+    // A distinct object: recycling identities is what lets a reference held across a removal
+    // silently start pointing at somebody else's data.
+    expect(fresh).not.toBe(removed);
+    expect(fresh.value).toBe(20);
     expect(list.size).toBe(1);
   });
 
-  test('Different type linked lists share object pool', () => {
+  test('Lists of different types never share node identities', () => {
     const numList = new LinkedList<number>();
     const strList = new LinkedList<string>();
 
@@ -76,8 +84,9 @@ describe('LinkedList (With Global Node Pooling)', () => {
 
     const s1 = strList.append('hello');
 
+    expect(s1).not.toBe(n1);
     expect(s1.value).toBe('hello');
-    expect(typeof s1.value).toBe('string');
+    expect(n1.value).toBeUndefined();
   });
 
   test('Complex operations: stability under frequent add/remove', () => {

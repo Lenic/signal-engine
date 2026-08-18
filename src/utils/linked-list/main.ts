@@ -1,5 +1,4 @@
-import type { LinkedNode } from './node';
-import { LinkedNodePool } from './pool';
+import { LinkedNode } from './node';
 import type { ILinkedList, ILinkedListInternalActions, ILinkedNode } from './types';
 
 export class LinkedList<T> implements ILinkedList<T>, ILinkedListInternalActions<T> {
@@ -54,7 +53,10 @@ export class LinkedList<T> implements ILinkedList<T>, ILinkedListInternalActions
 
     this._size--;
 
-    LinkedNodePool.release(internalNode);
+    // Scrubbed rather than recycled. A removed node keeps no links, so anything still holding a
+    // reference to it sees an inert object instead of one that has silently been handed to a
+    // different list - the failure mode a node pool trades correctness for.
+    internalNode.clear();
   }
 
   clear(callback?: (item: T, index: number) => void): void {
@@ -106,7 +108,8 @@ export class LinkedList<T> implements ILinkedList<T>, ILinkedListInternalActions
       throw new Error('[LinkedNode]: the node does not belong to this list.');
     }
 
-    const newNode = LinkedNodePool.acquire(value, this);
+    const newNode = new LinkedNode(value);
+    newNode.list = this;
     this._size++;
 
     newNode.next = internalNode ?? null;
@@ -139,7 +142,8 @@ export class LinkedList<T> implements ILinkedList<T>, ILinkedListInternalActions
       throw new Error('[LinkedNode]: the node does not belong to this list.');
     }
 
-    const newNode = LinkedNodePool.acquire(value, this);
+    const newNode = new LinkedNode(value);
+    newNode.list = this;
     this._size++;
 
     newNode.prev = internalNode ?? null;
