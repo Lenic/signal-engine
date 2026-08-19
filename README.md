@@ -1,278 +1,320 @@
 # @lenic/signal
 
-A lightweight, robust, high-performance, and type-safe Signals reactive engine built with TypeScript.
+A small, synchronous signals engine for TypeScript. Values know who reads them, and everything
+downstream stays correct without you wiring a thing.
 
 [![NPM Version](https://img.shields.io/npm/v/@lenic/signal?color=blue&style=flat-square)](https://www.npmjs.com/package/@lenic/signal)
-[![License](https://img.shields.io/npm/l/@lenic/signal?color=green&style=flat-square)](https://github.com/Lenic/signal-engine/blob/main/LICENSE)
+[![License](https://img.shields.io/npm/l/@lenic/signal?color=green&style=flat-square)](https://github.com/lenic/signal-engine/blob/main/LICENSE)
 [![NPM Downloads](https://img.shields.io/npm/dm/@lenic/signal?color=gradient&style=flat-square)](https://www.npmjs.com/package/@lenic/signal)
 
----
+🌐 **[简体中文](./README.zh-CN.md)** · **[日本語](./README.ja.md)**
 
-🌐 **Languages / 多语言**:
-
-- **[简体中文 (Simplified Chinese)](./README.zh-CN.md)**
-- **[日本語 (Japanese)](./README.ja.md)**
+> This started as a personal exercise, something to show what I could build while interviewing, and
+> it kept growing until it covered the whole feature set.
 
 ---
 
-## 🌟 Introduction
+```typescript
+import { signal, memo, effect } from '@lenic/signal';
 
-`@lenic/signal` is a pure TypeScript implementation of the Signals pattern. It provides fine-grained, reactive state management by tracking dependencies dynamically and triggering side effects automatically when observable values change.
+const first = signal('Ada');
+const last = signal('Lovelace');
 
-Unlike traditional reactive frameworks, `@lenic/signal` focuses on predictable sync scheduling and meticulous memory management. It is designed to be embedded in frontend frameworks, utility libraries, or pure vanilla JS applications.
+const fullName = memo(() => `${first()} ${last()}`);
 
-### Key Architectural Highlights
+effect(() => console.log(fullName()));
+// → "Ada Lovelace"
 
-- 🚀 **Doubly Linked List Dependency Graph**: Utilizes custom doubly linked lists (`LinkedList` and `LinkedNode`) instead of standard arrays to store connections. Dynamic dependency changes and stale subscription cleanup operate in $O(1)$ time complexity, bypassing array reallocation and splice overhead.
-- 🔄 **Predictable Synchronous Batching**: Bundles multiple signal writes inside a `batch()` call, executing updates synchronously at the end of the batch block without waiting for an asynchronous microtask cycle.
-- 🧹 **Hierarchical Lifecycle Management (No Memory Leaks)**: Implements structured disposal. Subscriptions created within active scopes (such as nested effects or computed memos) are registered under their parent scope and are **automatically and recursively cleaned up** when the parent is disposed.
-
----
-
-## 📐 Architecture & Flow
-
-The reactive flow of `@lenic/signal` relies on four main abstractions:
-
-1.  **Observable**: Holds values/actions that can be tracked (e.g., `Signal` or `Memo`).
-2.  **Subscriber**: Executing environment for reactive logic (e.g., `Effect` or `Memo` runner).
-3.  **Connector (`IConnector`)**: A doubly-linked bridge establishing an $O(1)$ relationship between Observables and Subscribers.
-4.  **Scheduler**: Manages queue execution and enforces synchronous batching.
-
-```mermaid
-classDiagram
-    class IDisposable {
-        <<interface>>
-        +dispose() void
-        +disposeWithMe(disposable) void
-    }
-
-    class IObservable {
-        <<interface>>
-        +ILinkedList~ISubscriber~ subscribers
-        +track() void
-        +trigger() void
-    }
-
-    class ISubscriber {
-        <<interface>>
-        +number version
-        +ILinkedList~ISubscriber~ children
-        +ILinkedList~IConnector~ dependencies
-        +ILinkedNode~IConnector~ currentConnector
-        +run(customAction) void
-        +scheduleUpdate() void
-    }
-
-    class IConnector {
-        <<interface>>
-        +number lastVersion
-        +IObservable observable
-        +ILinkedNode~ISubscriber~ subscriberNode
-    }
-
-    class IScheduler {
-        <<interface>>
-        +ETaskStatus taskStatus
-        +ISubscriber activeSubscriber
-        +ILinkedList~ISubscriber~ dirtySubscribers
-        +batch(action) void
-        +flush() void
-    }
-
-    IDisposable <|-- ISubscriber
-    ISubscriber *-- IConnector : dependencies
-    IConnector --> IObservable : observable
-    IObservable *-- ISubscriber : subscribers
-    IConnector --> ISubscriber : subscriberNode
-    ISubscriber *-- ISubscriber : children
-    IScheduler --> ISubscriber : activeSubscriber
-    IScheduler *-- ISubscriber : dirtySubscribers
+last('Byron');
+// → "Ada Byron"
 ```
 
+No subscriptions to register, no dependency arrays to keep in sync, no teardown to remember.
+Reading a value inside a `memo` or an `effect` is the subscription, and the engine works out the
+rest.
+
 ---
 
-## 📦 Installation
+## Why you might pick this one
 
-Install the package via your favorite package manager:
+**It passes a public conformance suite in full.**
+[`reactive-framework-test-suite`](https://www.npmjs.com/package/reactive-framework-test-suite)
+is 179 cases covering glitch-freedom, dynamic dependencies, batching, disposal ordering, cycle
+detection and error recovery. Those are the corners where reactive engines differ in ways nobody
+documents. This one passes **179 / 179 with nothing skipped**, plus 85 tests of its own. Run
+`pnpm test` and check.
+
+**Everything is synchronous.** A write settles before the next line of your code runs. No
+microtask queue, no "wait a tick and it will be consistent". That makes it easy to test, and easy
+to follow when something goes wrong.
+
+**Nothing outlives its owner.** Anything created while a `memo` or `effect` is running belongs to
+that run: nested effects, cleanup functions, adopted resources. When the owner re-runs or is
+disposed, they all go with it, recursively.
+
+**No spin on the speed.** Propagation is competitive, construction is not yet. The whole table,
+losses included, is [further down](#performance).
+
+---
+
+## Install
 
 ```bash
-# Using npm
 npm install @lenic/signal
-
-# Using pnpm
 pnpm add @lenic/signal
-
-# Using yarn
 yarn add @lenic/signal
 ```
 
 ---
 
-## 🛠️ API Reference & Examples
+## API
 
-### 1. `signal(initialValue)`
+Four functions. That is the whole surface.
 
-Creates a writable signal that holds a value.
+### `signal(initialValue, options?)`
 
-- **Read**: Call the function itself: `val()`
-- **Write**: Use the `(newValue)` method: `val(newValue)`
+A value you can read and write. Call it with no arguments to read, with one to write.
 
 ```typescript
-import { signal } from '@lenic/signal';
-
 const count = signal(0);
 
-// Reading the signal
-console.log(count()); // Output: 0
-
-// Modifying the signal
-count(5);
-console.log(count()); // Output: 5
+count();      // → 0     (read)
+count(5);     // (write)
+count();      // → 5
 ```
 
-### 2. `effect(fn)`
-
-Creates a subscriber that immediately executes `fn`, automatically tracks accessed signals, and reruns whenever those signals change.
-
-- **Returns**: A cleanup function `() => void` to dispose of the effect.
+Writing a value that compares equal to the current one changes nothing and notifies nobody.
+Equality is `===` by default; pass your own when that is too strict:
 
 ```typescript
-import { signal, effect } from '@lenic/signal';
+const deepEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const config = signal({ theme: 'dark' }, { comparer: deepEqual });
 
-const count = signal(0);
-const name = signal('Antigravity');
+config({ theme: 'dark' });   // a new object, but nothing downstream re-runs
+config({ theme: 'light' });  // this one propagates
+```
 
-// Immediately prints "Antigravity has count: 0"
-const dispose = effect(() => {
-  console.log(`${name()} has count: ${count()}`);
+### `memo(fn)`
+
+A derived value. It does not run until something reads it, and the result stays cached until one of
+its dependencies actually changes.
+
+```typescript
+const items = signal([1, 2, 3]);
+
+const total = memo(() => {
+  console.log('summing');
+  return items().reduce((a, b) => a + b, 0);
 });
 
-count(1); // Output: "Antigravity has count: 1"
-name('DeepMind'); // Output: "DeepMind has count: 1"
+total();  // → 6, logs "summing"
+total();  // → 6, silent — cached
 
-// Stop tracking changes
-dispose();
-
-count(2); // (No output)
+items([1, 2, 3, 4]);
+total();  // → 10, logs "summing"
 ```
 
-### 3. `memo(fn)`
-
-Creates a read-only computed signal that lazily evaluates and memoizes the result of the provided function.
-
-- **Lazy & Cached**: Only recomputes if its dependencies have changed **and** the value is actually read.
-- **Returns**: A readonly signal containing `.dispose()` and `.disposeWithMe(disposable)`.
+A memo stops propagating when its own value comes out unchanged, so a source that churns without
+affecting the result costs you nothing downstream:
 
 ```typescript
-import { signal, memo } from '@lenic/signal';
+const n = signal(1);
+const isOdd = memo(() => n() % 2 === 1);
 
-const count = signal(10);
-const double = memo(() => {
-  console.log('Calculating...'); // Only runs when dependencies change and read
-  return count() * 2;
+effect(() => console.log(isOdd()));  // → true
+
+n(3);  // `n` changed, `isOdd` recomputed, still true → the effect does not re-run
+```
+
+Call `total.dispose()` when you are done with a memo that is not owned by anything else.
+
+### `effect(fn)`
+
+Runs `fn` immediately, tracks whatever it reads, and runs it again whenever any of that changes.
+Returns a function that stops it.
+
+```typescript
+const user = signal('ada');
+
+const stop = effect(() => {
+  document.title = user();
 });
 
-// First read - triggers computation
-console.log(double()); // Output: "Calculating..." -> 20
-
-// Subsequent read - returns cached value without recomputing
-console.log(double()); // Output: 20
-
-// Modify dependency
-count(20);
-
-// Value is dirty now, next read computes again
-console.log(double()); // Output: "Calculating..." -> 40
-
-// Cleanup memo subscriber
-double.dispose();
+user('grace');   // title updates
+stop();
+user('katherine');  // nothing happens
 ```
 
-### 4. `batch(action)`
+The first run is always synchronous, whether on creation, inside a batch, or inside another
+effect. By the time `effect()` returns, the body has run and its dependencies are live.
 
-Combines multiple signal mutations inside one block, delaying the execution of subscriber side effects until the block completes.
-
-- **Execution**: Purely synchronous. The `flush()` runs immediately after the action completes inside a `finally` block.
+**Return a function to clean up after yourself.** It runs before the next re-run, and once more
+when the effect is disposed:
 
 ```typescript
-import { signal, effect, batch } from '@lenic/signal';
-
-const count = signal(0);
-const name = signal('A');
+const channel = signal('general');
 
 effect(() => {
-  console.log(`Updated: ${name()} - ${count()}`);
-}); // Output: "Updated: A - 0"
+  const socket = connect(channel());
 
-// Combine multiple updates using batch
+  return () => socket.close();
+});
+```
+
+### `batch(fn)`
+
+Groups writes so that everything downstream sees one settled result instead of each intermediate
+step.
+
+```typescript
+const width = signal(10);
+const height = signal(20);
+
+effect(() => console.log(width() * height()));  // → 200
+
 batch(() => {
-  name('B'); // No effect execution yet
-  count(100); // No effect execution yet
+  width(30);
+  height(40);
 });
-
-// Output: "Updated: B - 100" (Executed once synchronously at the end of batch)
+// → 1200, once — not 600 then 1200
 ```
+
+Batching is synchronous too: the flush happens as `batch()` returns, not on a later tick. And if
+the writes cancel out (set to something else and back again), nothing downstream runs at all.
 
 ---
 
-### 5. `setGlobalDeepComparator(comparator)`
+## Lifecycle
 
-Sets a global deep comparator function used by signals when the `comparator: 'deep'` option is specified.
+Anything created while a `memo` or `effect` is running is owned by that run.
 
 ```typescript
-import { setGlobalDeepComparator, signal } from '@lenic/signal';
+const outer = signal(0);
+const inner = signal(0);
 
-// Define a deep comparator (simple JSON string comparison)
-const deepEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const stop = effect(() => {
+  outer();
 
-// Register the global deep comparator
-setGlobalDeepComparator(deepEqual);
-
-// Signal using deep comparison
-const obj = signal({ count: 1 }, { comparator: 'deep' });
-
-obj({ count: 1 }); // No subscriber notification because values are deep equal
-obj({ count: 2 }); // Triggers subscribers as values differ
-```
-
-> **Note**: The comparator should be a pure function returning a boolean indicating deep equality.
-
----
-
-## 🧹 Memory Management & Parent-Child Disposables
-
-`@lenic/signal` features a robust tree-like cleanup system. Subscriptions are designed to be nested, making it straightforward to build complex hierarchical scopes.
-
-If a `Subscriber` (like an `effect` or `memo`) is created inside the execution of another parent `Subscriber`, the child subscriber automatically registers under the parent. When the parent's `run()` is triggered or when it is `.dispose()`-d, the child subscribers are recursively disposed of.
-
-```typescript
-import { signal, effect } from '@lenic/signal';
-
-const outerSignal = signal(0);
-const innerSignal = signal(100);
-
-const disposeOuter = effect(() => {
-  console.log(`Outer: ${outerSignal()}`);
-
-  // Nested effect: Automatically registered to parent 'outer' subscriber
-  effect(() => {
-    console.log(`Inner: ${innerSignal()}`);
-  });
+  effect(() => console.log('inner:', inner()));
 });
-// Initial output:
-// "Outer: 0"
-// "Inner: 100"
 
-innerSignal(200); // Output: "Inner: 200"
+inner(1);   // → "inner: 1"
 
-// Disposing the outer effect will automatically tear down the nested inner effect
-disposeOuter();
-
-innerSignal(300); // (No output, inner effect was automatically disposed)
+stop();     // the nested effect goes too
+inner(2);   // silence
 ```
+
+The same holds when the owner merely re-runs: the previous run's children are disposed before the
+new run creates its replacements. Nothing accumulates.
 
 ---
 
-## 📄 License
+## How it works
 
-This project is licensed under the [MIT License](file:///Users/leniclei/test-code/signal-engine/LICENSE).
+Two directions of traffic, and every piece exists to serve one of them.
+
+```mermaid
+flowchart LR
+    S(["signal / memo"]) -->|owns| L["<b>VersionLeader</b><br>version · dirty flag · followers"]
+    L -->|"marks dirty"| F["<b>VersionFollower</b><br>the dirty inbox of one reader"]
+    F -->|belongs to| R(["memo / effect"])
+    R -->|owns| C["<b>ConnectorManager</b><br>one slot per dependency,<br>matched by read order"]
+    C -->|"records the version of"| L
+```
+
+Going right: a reader records the **version** of everything it reads.
+Going left: a source that changes marks its followers **dirty**.
+
+Dirty means "come and check", not "recompute". The reader wakes up, compares each recorded version
+against the current one, and only runs its body if something actually moved. That is what makes an
+unchanged result stop propagation dead.
+
+Here is a write, end to end:
+
+```mermaid
+flowchart TD
+    W["count(1)"] --> B{"inside a batch?"}
+    B -->|no| M["mark the leader dirty"]
+    B -->|yes| Q["apply the value now,<br>hold the dirt until flush"]
+    Q --> FL["end of batch"]
+    FL --> M
+    M --> P["walk the followers"]
+    P --> MEMO["<b>memo</b>: mark its own leader dirty<br><i>nothing recomputes yet</i>"]
+    P --> EFF["<b>effect</b>: put it on the schedule"]
+    MEMO --> P
+    EFF --> RUN["flush runs it"]
+    RUN --> CHK{"did any recorded<br>version move?"}
+    CHK -->|no| SKIP["skip: the body never runs"]
+    CHK -->|yes| GO["run the body,<br>re-track dependencies"]
+```
+
+### The pieces
+
+| | |
+| --- | --- |
+| `EqualComparer` | Holds a value and decides what counts as a change |
+| `VersionLeader` | A readable source: a version, a dirty flag, and its followers |
+| `VersionFollower` | The dirty inbox belonging to one reader |
+| `ConnectorManager` | A reader's dependency slots, matched by read order so a stable dependency set costs one identity check per read |
+| `Schedulable` | Whether a signal has a pending write, or an effect a pending run |
+| `globalScheduler` | Opens batches, drains the queues, and stops a runaway cycle from poisoning the process |
+
+Dependencies are tracked by **position**. A reader's slots are filled in read order, so a graph
+whose shape does not change reuses them in place, with no allocation and no bookkeeping. When the
+shape does change, only the slots that disagree get rewired, and reading the same source twice
+folds into the slot the first read already claimed.
+
+---
+
+## Performance
+
+Measured against three mature reactive cores on the same graphs. Run it yourself:
+
+```bash
+pnpm bench
+```
+
+Node v25.8.2, 15 samples per cell, median, milliseconds. **Lower is better.**
+
+| Scenario | **@lenic/signal** | @preact/signals-core | alien-signals | @vue/reactivity |
+| --- | --- | --- | --- | --- |
+| deep chain (depth 50, 5k writes) | 42.2 | 11.2 | **4.8** | 14.4 |
+| fan-out (1 source, 100 memos) | 24.4 | 8.4 | **3.9** | 10.7 |
+| diamond (width 20, 5k writes) | 23.5 | 8.7 | **3.3** | 11.1 |
+| dynamic deps (10k branch switches) | 8.7 | 2.6 | **1.6** | 2.8 |
+| wide sources (100 signals, 10k writes) | 20.0 | 12.9 | **10.7** | 16.6 |
+| cached reads (1M reads) | **5.3** | 5.8 | 6.4 | 8.4 |
+| creation (20k signal+memo pairs) | 12.8 | 1.5 | **1.1** | 2.1 |
+| effect create+dispose (20k) | 9.3 | 1.6 | **0.8** | 2.1 |
+| batched writes (2k × 10) | 4.3 | 1.2 | **0.8** | n/a |
+
+**Where it stands.** Repeated reads of an unchanged memo are the fastest of the four. Propagation
+through a wide dependency set is within 2×. Deep chains and fan-out sit at 6 to 9×. Construction
+is the weak spot at roughly 12×: a signal costs 480 bytes here against a few dozen elsewhere,
+because value, versioning and scheduling are three separate collaborators rather than fields on
+one object.
+
+That split is deliberate, and it is what made the conformance run reachable. Watching those roles
+independently is how a dozen silent bugs in this engine turned up. Closing the last of the
+construction gap means collapsing them, and that trade has not looked worth it: construction
+happens once per signal, propagation happens forever.
+
+**Caveats.** These are synthetic graphs on an idle machine. The ranking moves with graph shape,
+update frequency and payload size. Numbers are comparable only within one run on one machine.
+`pnpm bench` verifies that every library agrees on behaviour before it times anything, and
+compares a checksum per scenario. Without that, a library quietly doing less work would look like
+the fastest one here.
+
+---
+
+## Status
+
+`0.x`, and the internals still move between minor versions. The four public functions are stable;
+the exported machinery (`VersionLeader`, `ConnectorManager`, `globalScheduler` and friends) is
+there for building on top, and does change.
+
+---
+
+## License
+
+[MIT](./LICENSE)
