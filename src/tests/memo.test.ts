@@ -1,7 +1,15 @@
 import { describe, expect, test } from 'vitest';
+import { globalScheduler } from '../core';
 import { signal } from '../signal';
 import { effect } from '../effect';
 import { memo } from '../memo';
+import type { IMemoValue } from '../types';
+
+/** Reaches past the public surface to assert on the dependency graph a memo actually built. */
+const connectorCount = (m: IMemoValue<unknown>) =>
+  (m as unknown as { manager: { ['_list']: { size: number } } }).manager['_list'].size;
+const followerCount = (s: unknown) => (s as { leader: { ['_followers']: { size: number } } }).leader['_followers'].size;
+const managerOf = (m: IMemoValue<unknown>) => (m as unknown as { manager: { disconnect(): void } }).manager;
 
 describe('memo', () => {
   test('basic computation', () => {
@@ -94,26 +102,35 @@ describe('memo', () => {
     // B   C
     //  \ /
     //   D (effect / read)
-    const a = signal(1);
+    const a = signal(1, { name: 'a' });
 
     let bCount = 0;
-    const b = memo(() => {
-      bCount++;
-      return a() + 10;
-    });
+    const b = memo(
+      () => {
+        bCount++;
+        return a() + 10;
+      },
+      { name: 'b' },
+    );
 
     let cCount = 0;
-    const c = memo(() => {
-      cCount++;
-      return a() * 100;
-    });
+    const c = memo(
+      () => {
+        cCount++;
+        return a() * 100;
+      },
+      { name: 'c' },
+    );
 
     let dCount = 0;
     const dList: number[] = [];
-    effect(() => {
-      dCount++;
-      dList.push(b() + c());
-    });
+    effect(
+      () => {
+        dCount++;
+        dList.push(b() + c());
+      },
+      { name: 'effect' },
+    );
 
     // Initialization:
     // a = 1 -> b = 11, c = 100 -> b+c = 111
@@ -207,5 +224,270 @@ describe('memo', () => {
     // Setting back to valid value allows recovery
     a(3);
     expect(m()).toBe(6);
+  });
+
+  test('@201: effect will skip if the memo disposed the effect', () => {
+    debugger;
+    const s = signal(0);
+    let dispose1!: () => void;
+    let e1runs = 0;
+
+    const a = memo(() => {
+      if (s() === 1) dispose1();
+      return s();
+    });
+
+    dispose1 = effect(() => {
+      a();
+      e1runs++;
+    });
+    effect(() => {
+      a();
+    }); // keep `a` alive
+
+    expect(e1runs).toBe(1);
+    s(1);
+    expect(e1runs).toBe(1); // disposed during propagation, should not re-run
+
+    s(2);
+    s(3);
+    expect(e1runs).toBe(1); // no subscription leak
+  });
+
+  test('a memo re-dirtied by its own recomputation does not stay stuck clean', () => {
+    const s = signal(1);
+    let runs = 0;
+
+    const c = memo(() => {
+      runs++;
+      s(s() + 1);
+
+      return s();
+    });
+
+    expect(c()).toBe(2);
+    expect(s()).toBe(2);
+    expect(runs).toBe(1);
+
+    // The run itself left `s` dirty, so the next read has to recompute instead of handing back
+    // the cache - the dirt raised *during* a confirmation must outlive that confirmation.
+    expect(c()).toBe(3);
+    expect(s()).toBe(3);
+    expect(runs).toBe(2);
+
+    expect(c()).toBe(4);
+    expect(runs).toBe(3);
+  });
+
+  test('dropping several dependencies at once releases every one of them', () => {
+    const flag = signal(true);
+    const a = signal(1);
+    const b = signal(2);
+    const c = signal(3);
+
+    let runs = 0;
+    const m = memo(() => {
+      runs++;
+      return flag() ? a() + b() + c() : 0;
+    });
+
+    expect(m()).toBe(6);
+
+    expect([followerCount(a), followerCount(b), followerCount(c)]).toEqual([1, 1, 1]);
+
+    // One run drops three dependencies at once, so all three subscriptions have to go - not
+    // just the first stale slot.
+    flag(false);
+    expect(m()).toBe(0);
+    expect([followerCount(a), followerCount(b), followerCount(c)]).toEqual([0, 0, 0]);
+
+    // A leaked subscription would show up here as a recomputation triggered by a signal the
+    // memo no longer reads.
+    const before = runs;
+    b(999);
+    expect(m()).toBe(0);
+    expect(runs).toBe(before);
+
+    c(999);
+    expect(m()).toBe(0);
+    expect(runs).toBe(before);
+  });
+
+  test('reading one signal several times registers a single dependency', () => {
+    const s = signal(1);
+    const other = signal(100);
+    let runs = 0;
+
+    const m = memo(() => {
+      runs++;
+      // Same leader read repeatedly, and interleaved with another one so the repeats are not
+      // merely adjacent.
+      return s() + other() + s() + s();
+    });
+
+    expect(m()).toBe(103);
+
+    expect(connectorCount(m)).toBe(2);
+    expect(followerCount(s)).toBe(1);
+
+    // Folding the repeats away must not cost any reactivity.
+    s(2);
+    expect(m()).toBe(106);
+    expect(runs).toBe(2);
+
+    other(200);
+    expect(m()).toBe(206);
+    expect(runs).toBe(3);
+  });
+
+  test('a read inside a batch sees the writes that batch has already made', () => {
+    const src = signal(0);
+    const side = signal(0);
+
+    // The memo writes on the side, which is how the batch's own queue gets exercised from
+    // inside a computation as well.
+    const c = memo(() => {
+      const value = src();
+      side(value * 10);
+
+      return value;
+    });
+
+    expect(c()).toBe(0);
+
+    let effectRuns = 0;
+    effect(() => {
+      side();
+      effectRuns++;
+    });
+    effectRuns = 0;
+
+    globalScheduler.batch(() => {
+      src(5);
+
+      // Reading the signal directly has always seen `5` here; reading through the memo used to
+      // answer `0` from a cache the batch had already invalidated.
+      expect(src()).toBe(5);
+      expect(c()).toBe(5);
+      expect(side()).toBe(50);
+    });
+
+    expect(effectRuns).toBeGreaterThanOrEqual(1);
+    expect(side()).toBe(50);
+  });
+
+  test('a value read mid-batch and then changed again settles on the last write', () => {
+    const a = signal(1);
+    let runs = 0;
+
+    const doubled = memo(() => {
+      runs++;
+      return a() * 2;
+    });
+
+    expect(doubled()).toBe(2);
+    expect(runs).toBe(1);
+
+    globalScheduler.batch(() => {
+      a(5);
+      expect(doubled()).toBe(10); // observes the intermediate value
+
+      a(0); // ...and then moves on
+    });
+
+    // The mid-batch read must not leave the memo pinned to the value it saw.
+    expect(doubled()).toBe(0);
+    expect(runs).toBe(3);
+  });
+
+  test('a batch whose writes cancel out never invalidates anything', () => {
+    const a = signal(0);
+    let runs = 0;
+
+    const doubled = memo(() => {
+      runs++;
+      return a() * 2;
+    });
+
+    expect(doubled()).toBe(0);
+    runs = 0;
+
+    // No read inside the batch, so the writes stay queued and settle to a net change of zero.
+    globalScheduler.batch(() => {
+      a(5);
+      a(0);
+    });
+
+    expect(doubled()).toBe(0);
+    expect(runs).toBe(0);
+  });
+
+  test('a memo that disposes its reader while being read for the first time', () => {
+    const flag = signal(false);
+    const s = signal(0);
+    let disposeReader: (() => void) | undefined;
+
+    // Computing `a` disposes whoever is reading it. The read sits on a branch the effect only
+    // takes later, so `a` gets tracked for the first time from inside the action - the one path
+    // where confirming re-enters user code while a dependency slot is being claimed.
+    const a = memo(() => {
+      if (s() === 1) disposeReader?.();
+
+      return s();
+    });
+
+    let runs = 0;
+    disposeReader = effect(() => {
+      runs++;
+      if (flag()) a();
+    });
+
+    expect(runs).toBe(1);
+
+    s(1); // `a` is dirty now, but the effect does not depend on it yet
+
+    expect(() => flag(true)).not.toThrow();
+    expect(runs).toBe(2);
+
+    // It disposed itself mid-read, so nothing may reach it any more.
+    flag(false);
+    s(2);
+    expect(runs).toBe(2);
+  });
+
+  test('a read arriving after the dependency table is severed claims a fresh slot', () => {
+    const s = signal(1);
+    let m!: IMemoValue<number>;
+
+    m = memo(() => {
+      const first = s();
+
+      // Severing mid-run retires the slot the first read claimed. The second read must not fold
+      // itself into that orphan, or the dependency would be dropped without a trace.
+      managerOf(m).disconnect();
+
+      return first + s();
+    });
+
+    expect(m()).toBe(2);
+    expect(connectorCount(m)).toBe(1);
+    expect(followerCount(s)).toBe(1);
+
+    // A lost subscription would leave this stuck at 2.
+    s(5);
+    expect(m()).toBe(10);
+  });
+
+  test('a memo whose body reads itself reports the cycle, not a downstream symptom', () => {
+    const m: IMemoValue<number> = memo(() => m() + 1);
+
+    expect(() => m()).toThrow('[memo]: circular dependency detected.');
+  });
+
+  test('two memos reading each other report the cycle', () => {
+    const a: IMemoValue<number> = memo(() => b());
+    const b: IMemoValue<number> = memo(() => a());
+
+    expect(() => a()).toThrow('[memo]: circular dependency detected.');
   });
 });

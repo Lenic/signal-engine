@@ -3,7 +3,7 @@
   "author": "lenic",
   "license": "MIT",
   "type": "module",
-  "version": "0.1.7",
+  "version": "0.9.0",
   "description": "Implement signal by typescript",
   "types": "./dist/index.d.mts",
   "exports": {
@@ -27,11 +27,16 @@
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
-    "test": "vitest",
-    "test:run": "vitest run",
-    "test:dev": "vitest --inspect-brk --no-file-parallelism"
+    "test": "vitest run",
+    "test:w": "vitest",
+    "test:dev": "vitest run --inspect-brk --no-file-parallelism",
+    "bench": "pnpm build && node --expose-gc src/bench/index.mjs"
   },
   "devDependencies": {
+    "@preact/signals-core": "^1.14.4",
+    "@vue/reactivity": "^3.5.41",
+    "alien-signals": "^3.2.1",
+    "reactive-framework-test-suite": "^0.0.2",
     "tsdown": "^0.21.7",
     "typescript": "^6.0.2",
     "vitest": "^4.1.5"

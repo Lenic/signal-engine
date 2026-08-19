@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { signal } from '../signal';
 import { effect } from '../effect';
 import { memo } from '../memo';
-import { scheduler } from '../core';
+import { globalScheduler } from '../core';
 
 describe('batch', () => {
   test('basic batch updates', () => {
@@ -19,7 +19,7 @@ describe('batch', () => {
     expect(runCount).toBe(1);
     expect(list).toEqual([3]);
 
-    scheduler.batch(() => {
+    globalScheduler.batch(() => {
       a(2);
       a(3);
       b(4);
@@ -43,8 +43,8 @@ describe('batch', () => {
 
     expect(runCount).toBe(1);
 
-    scheduler.batch(() => {
-      scheduler.batch(() => {
+    globalScheduler.batch(() => {
+      globalScheduler.batch(() => {
         a(10);
         b(20);
       });
@@ -68,7 +68,7 @@ describe('batch', () => {
 
     expect(runCount).toBe(1);
 
-    scheduler.batch(() => {
+    globalScheduler.batch(() => {
       a(2);
       a(1); // Set back to original value before batch ends
     });
@@ -88,7 +88,7 @@ describe('batch', () => {
 
     expect(runCount).toBe(1);
 
-    scheduler.batch(() => {
+    globalScheduler.batch(() => {
       a(2);
       dispose(); // Dispose before batch flushes
     });
@@ -115,7 +115,7 @@ describe('batch', () => {
     expect(normalEffectRun).toBe(1);
 
     expect(() => {
-      scheduler.batch(() => {
+      globalScheduler.batch(() => {
         b(20);
         a(2); // Causes crash during flush
       });
@@ -142,7 +142,7 @@ describe('batch', () => {
 
     expect(runCount).toBe(1);
 
-    scheduler.batch(() => {
+    globalScheduler.batch(() => {
       a(3);
       b(2);
       a(2);

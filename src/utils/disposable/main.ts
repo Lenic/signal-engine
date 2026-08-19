@@ -2,7 +2,9 @@ import { IDisposable } from './types';
 import { isDisposable } from './utils';
 
 export class Disposable implements IDisposable {
-  private subscriptionList: (() => void)[] = [];
+  // Left unallocated until something is actually registered. Most objects in this engine never
+  // register anything, and an eagerly created array is a meaningful share of their footprint.
+  private subscriptionList: (IDisposable | (() => void))[] | null = null;
 
   protected isDisposed = false;
 
@@ -10,9 +12,20 @@ export class Disposable implements IDisposable {
     if (this.isDisposed) return;
 
     try {
-      this.subscriptionList.forEach((fn) => void fn());
+      const list = this.subscriptionList;
+      if (list) {
+        // Entries are stored as handed in and unwrapped here, so registering a disposable does
+        // not cost a wrapper closure per call.
+        for (const entry of list) {
+          if (isDisposable(entry)) {
+            entry.dispose();
+          } else {
+            entry();
+          }
+        }
+      }
     } finally {
-      this.subscriptionList = undefined as unknown as (() => void)[];
+      this.subscriptionList = null;
       this.isDisposed = true;
     }
   }
@@ -20,11 +33,7 @@ export class Disposable implements IDisposable {
   disposeWithMe(disposable: IDisposable | (() => void)): void {
     this.checkDisposed();
 
-    if (isDisposable(disposable)) {
-      this.subscriptionList.push(() => void disposable.dispose());
-    } else {
-      this.subscriptionList.push(disposable);
-    }
+    (this.subscriptionList ??= []).push(disposable);
   }
 
   /**

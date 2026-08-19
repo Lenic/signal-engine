@@ -1,12 +1,11 @@
 import { describe, expect, test } from 'vitest';
-import { effect, setGlobalDeepComparator, signal } from '../index';
+import { effect, signal } from '../index';
 
-describe('setGlobalDeepComparator', () => {
-  test('deep comparator prevents unnecessary updates', () => {
+describe('signal comparer option', () => {
+  test('a custom comparer suppresses updates for values it considers equal', () => {
     const deepEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
-    setGlobalDeepComparator(deepEqual);
 
-    const obj = signal({ count: 1 }, { comparator: 'deep' });
+    const obj = signal({ count: 1 }, { comparer: deepEqual });
     let runCount = 0;
     const dispose = effect(() => {
       runCount++;

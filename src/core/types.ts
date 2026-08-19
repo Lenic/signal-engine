@@ -1,151 +1,150 @@
-import { IDisposable, ILinkedList, ILinkedNode } from '../utils';
-import { SIGNAL_DEBUG_META } from './constants';
+import { IDisposable, IErrorScopeContext, ILinkedList } from '../utils';
 
-/**
- * Represents a connection between a subscriber and an observable.
- */
-export interface IConnector {
-  /** The version of the subscriber when this connection was last validated. */
-  lastVersion: number;
-  /** The observable being tracked. */
-  observable: IObservable;
-  /** The node in the observable's subscriber list representing this subscription. */
-  subscriberNode: ILinkedNode<ISubscriber>;
+export interface IObjectOptions {
+  name?: string;
 }
 
-/**
- * Represents an entity that can subscribe to observables and be notified of changes.
- */
-export interface ISubscriber extends IDisposable {
-  /** The current version of the subscriber, incremented on each run. */
-  version: number;
-  /** The children subscribers of this subscriber. */
-  children: ILinkedList<ISubscriber> | null;
-  /** The list of observables this subscriber currently depends on. */
-  dependencies: ILinkedList<IConnector>;
-  /** The current connector being processed during the tracking phase. */
-  currentConnector: ILinkedNode<IConnector> | null;
+export interface IDirtyMarkable extends IDisposable {
+  readonly name?: string;
+  readonly isDirty: boolean;
+
+  markDirty(): void;
 
   /**
-   * Executes the subscriber's logic, tracking any observables accessed during execution.
+   * Callback invoked when this object turns dirty
    *
-   * @param customAction Optional custom action to run instead of the default action.
+   * - assign to listen, set to null to stop listening
+   * - a single slot, because every dependency here has exactly one interested party
+   * - fires on the transition into dirty only, never on a mark that changes nothing
+   * - set to null on disposal
    */
-  run(customAction?: () => void): void;
+  onDirty: (() => void) | null;
+}
+
+export interface ISchedulable extends IDisposable {
+  readonly name?: string;
+  readonly isScheduled: boolean;
+
+  markScheduled(): void;
+  clearScheduled(): void;
+
   /**
-   * Schedules the subscriber to be processed by the scheduler.
+   * Callback invoked when the scheduled state flips
+   *
+   * - assign to listen, set to null to stop listening
+   * - a single slot, for the same reason as `onDirty`
+   * - fires on an actual flip only, so re-marking a scheduled task reports nothing
+   * - set to null on disposal
    */
-  scheduleUpdate(): void;
+  onScheduleChange: ((scheduled: boolean) => void) | null;
+}
+
+export interface IVersionFollowerOptions extends IObjectOptions {
+  /**
+   * @default `false`
+   */
+  isDirty?: boolean;
+}
+
+export interface IVersionFollower extends IDirtyMarkable, IDisposable {
+  clearDirty(): void;
+}
+
+export interface IVersionLeaderOptions extends IObjectOptions {
+  isDirty: boolean;
+  /**
+   * @default `() => true`
+   */
+  confirm?: (leader: IVersionLeader) => boolean;
 }
 
 /**
- * Represents an entity that can be observed and notifies its subscribers when it changes.
+ * Remembers which run last took this object as a dependency. A run identifies itself with a
+ * token unique for its lifetime, which is what lets a second read inside that same run be
+ * recognised - and folded into the slot the first read already claimed - in constant time.
  */
-export interface IObservable {
+export interface ITrackMarkable {
   /**
-   * Indicates whether the observable is currently in the queue to be processed.
-   * This is used to prevent the observable from being added to the queue multiple times.
+   * The snapshot the given run already recorded here, or `null` if that run has not read this
+   * object yet.
    */
-  isInQueue: boolean;
-  /** The list of subscribers currently observing this observable. */
-  subscribers: ILinkedList<ISubscriber>;
+  trackedBy(token: number): ISnapshot<IVersionLeader> | null;
 
-  /**
-   * Registers the active subscriber as a dependency of this observable.
-   */
-  track(): void;
-
-  /**
-   * Notifies all subscribers that the observable's value has changed.
-   */
-  trigger(): void;
+  /** Records that the given run has taken this object as a dependency. */
+  markTracked(token: number, snapshot: ISnapshot<IVersionLeader>): void;
 }
 
-export const ETaskStatus = {
-  IDLE: 'idle',
-  UPDATING: 'updating',
-  RUNNING: 'running',
-} as const;
-export type ETaskStatus = (typeof ETaskStatus)[keyof typeof ETaskStatus];
+export interface IVersionLeader extends IDirtyMarkable, ITrackMarkable, IDisposable {
+  /**
+   * Increments whenever a confirmation finds this leader's value actually moved. Readers record
+   * it alongside the dependency and compare later, which is how an unchanged value stops
+   * propagation without anyone recomputing.
+   */
+  readonly version: number;
 
-export interface IPendingObservable {
-  observable: IObservable;
-  originalValue: unknown;
-  comparator(a: unknown, b: unknown): boolean;
-  valueOf(): unknown;
+  confirm(): number;
+  appendFollower(follower: IVersionFollower): () => void;
+}
+
+export interface ISnapshot<T> {
+  instance: T;
+  version: number;
+}
+
+export interface IConnector {
+  snapshot: ISnapshot<IVersionLeader>;
+  unsubscribe: () => void;
+}
+
+export interface IConnectorManager<T = void> extends IDisposable {
+  readonly name?: string;
+
+  /**
+   * Whether the action is executing right now. A value produced by this manager that gets read
+   * while this is `true` is being read from inside its own computation - a circular dependency.
+   */
+  readonly isExecuting: boolean;
+
+  run(): T;
+  disconnect(): void;
+  track(provider: IVersionLeader): void;
+
+  /**
+   * Takes over responsibility for disposing a resource, binding it to the lifetime of the
+   * *current execution* rather than to the manager as a whole.
+   *
+   * Adopted resources are released right before every recomputation and when the manager
+   * itself is disposed, so anything created while the action runs - a nested effect, a
+   * timer, a subscription - can never outlive the run that created it.
+   */
+  adopt(disposable: IDisposable | (() => void)): void;
+}
+
+export interface IPendingSignalUpdate {
+  flush(): void;
 }
 
 export interface IScheduler {
-  deepComparator: null | ((a: unknown, b: unknown) => boolean);
-  /** The status of the scheduler. */
-  status: ETaskStatus;
-  /** The currently active subscriber being processed. */
-  activeSubscriber: ISubscriber | null;
-  /** The list of subscribers that are queued to be processed. */
-  dirtySubscribers: ILinkedList<ISubscriber>;
-  /** The list of observables that are queued to be processed. */
-  dirtyObservables: ILinkedList<IPendingObservable>;
+  isRunning: boolean;
+  connectorManager?: IConnectorManager;
+  pendingSignalUpdateList: ILinkedList<IPendingSignalUpdate>;
+  scheduledConnectorManagerList: ILinkedList<IConnectorManager>;
+
+  batch(action: (context: IErrorScopeContext) => void, finalize?: () => void): void;
 
   /**
-   * Runs a task in the scheduler's context.
-   * @param action The task to run.
+   * Runs an action with the guarantee that a batch is open around it, opening one only when
+   * there is not already one running. Meant for callers that just need their notifications to
+   * be collected and flushed - not for anything that needs to isolate failures of its own, which
+   * has to go through `batch` and use the error scope it hands out.
    */
-  batch(action: () => void): void;
-  /**
-   * Flushes the dirty subscribers.
-   */
-  flushSubscribers(): void;
-  /**
-   * Flushes the dirty observables.
-   */
-  flushObservables(): void;
-}
+  runBatched(action: () => void): void;
 
-/**
- * Meta data for signal debugging.
- */
-export interface ISignalMeta extends Record<string, unknown> {
   /**
-   * Type of the signal.
+   * Applies every write the running batch has queued so far. A write takes effect on the value
+   * immediately but publishes its dirt at flush time, so a read that travels *through* the
+   * graph - rather than straight off a signal - has to settle those writes first, or it answers
+   * from a cache the batch has already invalidated.
    */
-  readonly type: string;
-}
-
-/**
- * Represents a read-only signal value that can be read.
- */
-export interface IReadonlySignalValue<T> {
-  /**
-   * Gets the meta data for debugging.
-   */
-  [SIGNAL_DEBUG_META]: ISignalMeta;
-  /**
-   * Gets the current value of the signal.
-   */
-  (): T;
-}
-
-/**
- * Options for creating or updating a signal value.
- */
-export interface ISignalValueOptions {
-  /**
-   * The comparator function to use for comparing values.
-   *
-   * - `'deep'`: Deep comparison by the global default comparator.
-   * - `'shallow'`: Shallow comparison by `===`.
-   * - `(a: T, b: T) => boolean`: Custom comparator.
-   */
-  comparator?: 'deep' | 'shallow' | ((a: unknown, b: unknown) => boolean);
-}
-
-/**
- * Represents a writable signal value that can be read and updated.
- */
-export interface ISignalValue<T> extends IReadonlySignalValue<T> {
-  /**
-   * Sets a new value for the signal.
-   * @param value The new value to set.
-   */
-  (value: T, options?: ISignalValueOptions): void;
+  settlePendingWrites(): void;
 }

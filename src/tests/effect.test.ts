@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
+import { globalScheduler } from '../core';
 import { signal } from '../signal';
 import { effect } from '../effect';
+import { memo } from '../memo';
 
 describe('effect', () => {
   test('basic reactivity', () => {
@@ -151,6 +153,254 @@ describe('effect', () => {
     // Trigger normal effect update - it should still execute correctly since scheduler should recover
     b(20);
     expect(normalEffectRunCount).toBe(2);
+  });
+
+  test('the first run is synchronous in every context effect can be created from', () => {
+    // Each entry invokes `body` from one distinct context an effect can be created in. The
+    // contexts are independent, so no ordering between them is asserted - only that each one
+    // reaches the body and that the body's effect has already run when `effect()` returns.
+    const contexts: Array<[label: string, within: (body: () => void) => void]> = [
+      ['at the top level', (body) => body()],
+      ['inside a batch', (body) => globalScheduler.batch(body)],
+      ['inside nested batches', (body) => globalScheduler.batch(() => globalScheduler.batch(body))],
+      [
+        'inside an effect action',
+        (body) => {
+          const host = signal(0);
+          effect(() => {
+            host();
+            body();
+          });
+        },
+      ],
+      [
+        'inside a memo computation',
+        (body) => {
+          const m = memo(() => {
+            body();
+            return 1;
+          });
+          m();
+        },
+      ],
+      [
+        'inside a cleanup',
+        (body) => {
+          const host = signal(0);
+          effect(() => {
+            host();
+            return body;
+          });
+
+          host(1); // releases the previous run's cleanup, so `body` runs mid-flush
+        },
+      ],
+    ];
+
+    for (const [label, within] of contexts) {
+      let reached = false;
+
+      within(() => {
+        const s = signal(1);
+        let runs = 0;
+
+        effect(() => {
+          s();
+          runs++;
+        });
+
+        // A first run deferred to the flush would leave this at 0.
+        expect(runs, label).toBe(1);
+
+        reached = true;
+      });
+
+      // Guards against a context that silently never invokes the body.
+      expect(reached, label).toBe(true);
+    }
+  });
+
+  test('an effect whose very first run throws does not stay subscribed', () => {
+    const s = signal(0);
+    let runs = 0;
+
+    // The error escapes `effect()` itself, so the caller never receives a dispose handle.
+    expect(() =>
+      effect(() => {
+        runs++;
+        s();
+        throw new Error('boom');
+      }),
+    ).toThrow('boom');
+
+    expect(runs).toBe(1);
+
+    // Nothing can reach that effect any more, so it must have torn itself down instead of
+    // staying subscribed to `s` forever.
+    s(1);
+    expect(runs).toBe(1);
+  });
+
+  test('a flush that fails to converge leaves the rest of the graph usable', () => {
+    const trigger = signal(false);
+    const n = signal(0);
+
+    // Converges while `trigger` is false; becomes an unbounded cycle the moment it flips.
+    effect(() => {
+      if (trigger()) {
+        n(n() + 1);
+      }
+    });
+
+    expect(() => trigger(true)).toThrow(/Maximum flush iteration limit/);
+
+    // The aborted cycle must not be left armed in the scheduler's queues, or an unrelated
+    // effect created afterwards would inherit it and blow the same limit.
+    const other = signal(1);
+    let seen = 0;
+
+    effect(() => void (seen = other()));
+    expect(seen).toBe(1);
+
+    other(2);
+    expect(seen).toBe(2);
+  });
+
+  test('a notification that turns out to be a no-op does not wedge the schedule', () => {
+    // items -> isLoaded -> msg -> effect. Writing a different truthy value to `items` notifies
+    // the whole chain, yet leaves `isLoaded` unchanged, so the effect is scheduled and then
+    // skipped. That skipped run must not leave the schedule marked, or every later change is
+    // silently dropped.
+    const items = signal<number[] | undefined>(undefined);
+    const isLoaded = memo(() => !!items());
+    const msg = memo(() => (isLoaded() ? 'loaded' : 'not loaded'));
+
+    let seen = '';
+    let runs = 0;
+    effect(() => {
+      runs++;
+      seen = msg();
+    });
+
+    expect(seen).toBe('not loaded');
+    expect(runs).toBe(1);
+
+    items([1, 2, 3]);
+    expect(seen).toBe('loaded');
+    expect(runs).toBe(2);
+
+    // `isLoaded` stays `true`, so `msg` keeps its value and the effect must not re-run.
+    items([4, 5]);
+    expect(seen).toBe('loaded');
+    expect(runs).toBe(2);
+
+    // The real change must still get through - a wedged schedule would drop it silently.
+    items(undefined);
+    expect(seen).toBe('not loaded');
+    expect(runs).toBe(3);
+
+    // And repeatedly, so a single recovery is not mistaken for a fix.
+    items([6]);
+    expect(seen).toBe('loaded');
+    items([7]);
+    expect(seen).toBe('loaded');
+    items(undefined);
+    expect(seen).toBe('not loaded');
+  });
+
+  test('returned cleanup runs before each re-run and once on disposal', () => {
+    const s = signal(1);
+    const log: string[] = [];
+
+    const dispose = effect(() => {
+      const value = s();
+      log.push(`run:${value}`);
+
+      return () => log.push(`cleanup:${value}`);
+    });
+
+    expect(log).toEqual(['run:1']);
+
+    // The previous run's cleanup fires first, then the new run.
+    s(2);
+    expect(log).toEqual(['run:1', 'cleanup:1', 'run:2']);
+
+    s(3);
+    expect(log).toEqual(['run:1', 'cleanup:1', 'run:2', 'cleanup:2', 'run:3']);
+
+    dispose();
+    expect(log).toEqual(['run:1', 'cleanup:1', 'run:2', 'cleanup:2', 'run:3', 'cleanup:3']);
+
+    // Nothing left to trigger, and no further cleanup.
+    s(4);
+    expect(log).toEqual(['run:1', 'cleanup:1', 'run:2', 'cleanup:2', 'run:3', 'cleanup:3']);
+  });
+
+  test('a run that returns no cleanup leaves nothing behind', () => {
+    const s = signal(1);
+    let cleanupCount = 0;
+
+    effect(() => {
+      // Only the odd runs register a cleanup.
+      if (s() % 2 === 1) {
+        return () => void cleanupCount++;
+      }
+    });
+
+    expect(cleanupCount).toBe(0);
+
+    s(2); // releases run 1's cleanup, registers none
+    expect(cleanupCount).toBe(1);
+
+    s(3); // run 2 had no cleanup to release
+    expect(cleanupCount).toBe(1);
+
+    s(4); // releases run 3's cleanup
+    expect(cleanupCount).toBe(2);
+  });
+
+  test('cleanup reads do not become dependencies', () => {
+    const a = signal(1);
+    const b = signal(100);
+    let runCount = 0;
+
+    effect(() => {
+      runCount++;
+      a();
+
+      return () => void b();
+    });
+
+    expect(runCount).toBe(1);
+
+    // `b` was only ever read by a cleanup, so it must not be a dependency.
+    b(200);
+    expect(runCount).toBe(1);
+
+    a(2);
+    expect(runCount).toBe(2);
+  });
+
+  test('cleanup is not double-invoked when it disposes its own effect', () => {
+    const s = signal(1);
+    let cleanupCount = 0;
+    let dispose: (() => void) | undefined;
+
+    dispose = effect(() => {
+      s();
+
+      return () => {
+        cleanupCount++;
+        dispose?.();
+      };
+    });
+
+    s(2);
+    expect(cleanupCount).toBe(1);
+
+    // The effect disposed itself from within the cleanup, so nothing runs again.
+    s(3);
+    expect(cleanupCount).toBe(1);
   });
 
   test('disposing an effect during its own execution (self-dispose)', () => {

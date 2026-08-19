@@ -1,70 +1,50 @@
 import { LinkedNode } from './node';
-import { LinkedNodePool } from './pool';
-import { ILinkedList, ILinkedNode } from './types';
+import type { ILinkedList, ILinkedListInternalActions, ILinkedNode } from './types';
 
-/**
- * 双向链表类
- */
-export class LinkedList<T> implements ILinkedList<T> {
-  private _size: number = 0;
-  private _head: ILinkedNode<T> | null = null;
-  private _tail: ILinkedNode<T> | null = null;
+export class LinkedList<T> implements ILinkedList<T>, ILinkedListInternalActions<T> {
+  private _size: number;
+  private _head: ILinkedNode<T> | null;
+  private _tail: ILinkedNode<T> | null;
 
-  public get size(): number {
+  constructor() {
+    this._size = 0;
+    this._head = null;
+    this._tail = null;
+  }
+
+  get size(): number {
     return this._size;
   }
 
-  public get head(): ILinkedNode<T> | null {
+  get head(): ILinkedNode<T> | null {
     return this._head;
   }
 
-  public get tail(): ILinkedNode<T> | null {
+  get tail(): ILinkedNode<T> | null {
     return this._tail;
   }
 
-  /**
-   * 添加元素到末尾
-   * @returns 返回 ILinkedNode 接口，限制外部访问范围
-   */
-  public add(value: T): ILinkedNode<T> {
-    const newNode = LinkedNodePool.acquire(value, this);
-
-    if (!this._head) {
-      this._head = newNode;
-      this._tail = newNode;
-    } else {
-      newNode.prev = this._tail;
-      if (this._tail) {
-        this._tail.next = newNode;
-      }
-      this._tail = newNode;
-    }
-
-    this._size++;
-    return newNode;
+  prepend(value: T): ILinkedNode<T> {
+    return this.insertNodeBefore(this._head, value);
   }
 
-  /**
-   * 移除节点
-   * @param node 符合 ILinkedNode 接口的对象
-   */
-  public remove(node: ILinkedNode<T>): void {
-    // 将接口强制转换为内部实现类以便操作指针
+  append(value: T): ILinkedNode<T> {
+    return this.insertNodeAfter(this._tail, value);
+  }
+
+  remove(node: ILinkedNode<T>): void {
     const internalNode = node as LinkedNode<T>;
 
-    // 严谨性检查：确保该节点属于当前链表实例
-    if (!internalNode || internalNode.list !== this) {
-      return;
+    if (internalNode.list !== this) {
+      throw new Error('[LinkedNode]: the node does not belong to this list.');
     }
 
-    // 处理前驱节点的指向
     if (internalNode.prev) {
       internalNode.prev.next = internalNode.next;
     } else {
       this._head = internalNode.next;
     }
 
-    // 处理后继节点的指向
     if (internalNode.next) {
       internalNode.next.prev = internalNode.prev;
     } else {
@@ -73,22 +53,123 @@ export class LinkedList<T> implements ILinkedList<T> {
 
     this._size--;
 
-    // 回收节点到全局对象池
-    LinkedNodePool.release(internalNode);
+    // Scrubbed rather than recycled. A removed node keeps no links, so anything still holding a
+    // reference to it sees an inert object instead of one that has silently been handed to a
+    // different list - the failure mode a node pool trades correctness for.
+    internalNode.clear();
   }
 
-  public clear(): void {
+  clear(callback?: (item: T, index: number) => void): void {
+    let index = 0;
     let current = this._head;
+
     while (current) {
-      this.remove(current);
+      const nodeValue = current.value;
+
+      // Detached *before* the callback runs. A callback is free to re-enter `clear` on this
+      // same list - a cleanup that disposes its own owner does exactly that - and it must not
+      // find the entry that is already being processed still sitting in the list.
+      current.removeSelf();
+
+      try {
+        callback?.(nodeValue, index);
+      } finally {
+        index += 1;
+
+        current = this._head;
+      }
+    }
+
+    this._size = 0;
+    this._head = null;
+    this._tail = null;
+  }
+
+  forEach(callback: (item: T, index: number) => void): void {
+    let index = 0;
+    let current = this._head;
+
+    while (current) {
+      const nodeValue = current.value;
       current = current.next;
+
+      try {
+        callback(nodeValue, index);
+      } finally {
+        index += 1;
+      }
     }
   }
 
-  /**
-   * 辅助方法：转换为数组进行观察
-   */
-  public toArray(): T[] {
+  insertNodeBefore(node: ILinkedNode<T> | null, value: T): ILinkedNode<T> {
+    const internalNode = node as LinkedNode<T> | null;
+
+    if (internalNode && internalNode.list !== this) {
+      throw new Error('[LinkedNode]: the node does not belong to this list.');
+    }
+
+    const newNode = new LinkedNode(value);
+    newNode.list = this;
+    this._size++;
+
+    newNode.next = internalNode ?? null;
+    newNode.prev = internalNode?.prev ?? null;
+
+    if (internalNode) {
+      if (internalNode?.prev) {
+        internalNode.prev.next = newNode;
+      }
+      internalNode.prev = newNode;
+    }
+
+    // fix the heading node
+    if (this._head === internalNode) {
+      this._head = newNode;
+    }
+
+    // update the tail node if the tail node is null
+    if (!this.tail) {
+      this._tail = newNode;
+    }
+
+    return newNode;
+  }
+
+  insertNodeAfter(node: ILinkedNode<T> | null, value: T): ILinkedNode<T> {
+    const internalNode = node as LinkedNode<T> | null;
+
+    if (internalNode && internalNode.list !== this) {
+      throw new Error('[LinkedNode]: the node does not belong to this list.');
+    }
+
+    const newNode = new LinkedNode(value);
+    newNode.list = this;
+    this._size++;
+
+    newNode.prev = internalNode ?? null;
+    newNode.next = internalNode?.next ?? null;
+
+    if (internalNode) {
+      if (internalNode?.next) {
+        internalNode.next.prev = newNode;
+      }
+      internalNode.next = newNode;
+    }
+
+    // update the tail node if the internal node is null
+    if (this._tail === internalNode) {
+      this._tail = newNode;
+    }
+
+    // fix the heading node
+    if (!this._head) {
+      this._head = newNode;
+    }
+
+    return newNode;
+  }
+
+  toArray(): T[] {
     const result: T[] = [];
     let current = this._head;
     while (current) {

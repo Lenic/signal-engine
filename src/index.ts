@@ -1,4 +1,4 @@
-import { scheduler } from './core';
+import { globalScheduler } from './core';
 
 export * from './effect';
 export * from './signal';
@@ -11,13 +11,5 @@ export * from './utils';
  * @param action The task to run.
  */
 export function batch(action: () => void): void {
-  scheduler.batch(action);
-}
-
-/**
- * Sets the global deep comparator.
- * @param comparator The comparator function.
- */
-export function setGlobalDeepComparator(comparator: (a: unknown, b: unknown) => boolean): void {
-  scheduler.deepComparator = comparator;
+  globalScheduler.batch(action);
 }

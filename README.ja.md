@@ -1,276 +1,281 @@
 # @lenic/signal
 
-TypeScriptで構築された、軽量・堅牢・超高性能かつ型安全な Signals リアクティブ状態管理エンジン。
+TypeScript向けの、小さくて同期的なシグナルエンジン。値は自分を読んでいる相手を知っていて、下流は放っておいても整合性を保ちます。配線は一本も要りません。
 
 [![NPM Version](https://img.shields.io/npm/v/@lenic/signal?color=blue&style=flat-square)](https://www.npmjs.com/package/@lenic/signal)
-[![License](https://img.shields.io/npm/l/@lenic/signal?color=green&style=flat-square)](https://github.com/Lenic/signal-engine/blob/main/LICENSE)
+[![License](https://img.shields.io/npm/l/@lenic/signal?color=green&style=flat-square)](https://github.com/lenic/signal-engine/blob/main/LICENSE)
 [![NPM Downloads](https://img.shields.io/npm/dm/@lenic/signal?color=gradient&style=flat-square)](https://www.npmjs.com/package/@lenic/signal)
 
----
+🌐 **[English](./README.md)** · **[简体中文](./README.zh-CN.md)**
 
-🌐 **Languages / 多言語**:
-
-- **[English (英語)](./README.md)**
-- **[简体中文 (中国語)](./README.zh-CN.md)**
+> もともとは面接で自分の実力を見せるための個人的な練習プロジェクトでしたが、そのまま書き足していって、必要な機能はひと通り揃いました。
 
 ---
 
-## 🌟 はじめに
+```typescript
+import { signal, memo, effect } from '@lenic/signal';
 
-`@lenic/signal` は、Signals パターンの純粋な TypeScript 実装です。依存関係を動的かつ詳細に追跡し、観測可能な値（Observable）が変更されたときに自動的に副作用（Side Effect）をトリガーすることで、きめ細かな状態管理を提供します。
+const first = signal('Ada');
+const last = signal('Lovelace');
 
-一般的な肥大化したリアクティブフレームワークとは異なり、`@lenic/signal` は**確定的な同期スケジューリング**と**厳密なメモリ管理**に焦点を当てています。フロントエンドフレームワークへの組み込み、ユーティリティライブラリ、またはピュアなバニラ JS/TS アプリケーションに最適です。
+const fullName = memo(() => `${first()} ${last()}`);
 
-### 主要なアーキテクチャのハイライト
+effect(() => console.log(fullName()));
+// → "Ada Lovelace"
 
-- 🚀 **双方向連結リストによる依存関係グラフ (Doubly Linked List)**: サブスクライバーの管理に一般的な配列ではなく、カスタムの**双方向連結リスト**（`LinkedList` と `LinkedNode`）を採用しています。これにより、依存関係が動的に変更されたり、古いサブスクリプションを削除したりする操作が **$O(1)$ の時間複雑度**で実行され、配列の再メモリ割り当てや `splice` によるインデックス再計算のオーバーヘッドを完全に回避します。
-- 🔄 **予測可能な同期バッチング (Synchronous Batching)**: `batch()` 内での複数のシグナル書き込みをまとめ、非同期のマイクロタスク（Microtask）を待つことなく、バッチブロックの終了時に `try-finally` を通じて**即座に同期的に** `flush()` を実行します。これにより、極めて予測しやすい動的更新を実現し、非同期処理に伴うデバッグの難しさを解消します。
-- 🧹 **階層的な自動クリーンアップ管理 (メモリリークの防止)**: 堅牢なツリー型クリーンアップシステムを実装しています。アクティブなスコープ（ネストされた `effect` や計算値 `memo`）の内部で作成された子サブスクライバーは、親サブスクライバーの配下に自動的に登録されます。親が再実行されるか破棄（`dispose`）されると、すべての子サブスクリプションが**再帰的かつクリーンに自動破棄**され、メモリリークを根底から防止します。
-
----
-
-## 📐 アーキテクチャとフロー
-
-`@lenic/signal` のリアクティブフローは、主に次の4つの抽象化に依存しています：
-
-1.  **Observable（可観測源）**: 追跡可能な値やアクションを保持します（例: `Signal` または `Memo`）。
-2.  **Subscriber（購読者）**: リアクティブ論理の実行環境です（例: `Effect` の実行環境や `Memo` の評価器）。
-3.  **Connector（コネクター `IConnector`）**: 双方向連結リストブリッジであり、Observable と Subscriber の間に $O(1)$ の動的接続を確立します。
-4.  **Scheduler（スケジューラー）**: 同期バッチングと更新キューの実行を制御します。
-
-```mermaid
-classDiagram
-    class IDisposable {
-        <<interface>>
-        +dispose() void
-        +disposeWithMe(disposable) void
-    }
-
-    class IObservable {
-        <<interface>>
-        +ILinkedList~ISubscriber~ subscribers
-        +track() void
-        +trigger() void
-    }
-
-    class ISubscriber {
-        <<interface>>
-        +number version
-        +ILinkedList~ISubscriber~ children
-        +ILinkedList~IConnector~ dependencies
-        +ILinkedNode~IConnector~ currentConnector
-        +run(customAction) void
-        +scheduleUpdate() void
-    }
-
-    class IConnector {
-        <<interface>>
-        +number lastVersion
-        +IObservable observable
-        +ILinkedNode~ISubscriber~ subscriberNode
-    }
-
-    class IScheduler {
-        <<interface>>
-        +ETaskStatus taskStatus
-        +ISubscriber activeSubscriber
-        +ILinkedList~ISubscriber~ dirtySubscribers
-        +batch(action) void
-        +flush() void
-    }
-
-    IDisposable <|-- ISubscriber
-    ISubscriber *-- IConnector : dependencies
-    IConnector --> IObservable : observable
-    IObservable *-- ISubscriber : subscribers
-    IConnector --> ISubscriber : subscriberNode
-    ISubscriber *-- ISubscriber : children
-    IScheduler --> ISubscriber : activeSubscriber
-    IScheduler *-- ISubscriber : dirtySubscribers
+last('Byron');
+// → "Ada Byron"
 ```
 
+購読の登録も、依存配列の管理も、後片付けも要りません。`memo` や `effect` の中で値を読むこと自体が購読で、あとはエンジンが引き受けます。
+
 ---
 
-## 📦 インストール
+## これを選ぶ理由
 
-お好みのパッケージマネージャーを使用してインストールしてください：
+**公開されている適合性テストスイートを、一件も落とさずに通します。**
+[`reactive-framework-test-suite`](https://www.npmjs.com/package/reactive-framework-test-suite)
+には 179 件のケースがあり、グリッチのない伝播、動的依存、バッチ処理、破棄順序、循環検出、エラー復帰までを扱います。リアクティブエンジンの違いがいちばん出るのに、どこにも書かれていない部分です。ここでは **179 / 179 をスキップなしで通過**し、さらに独自のテストが 85 件あります。`pnpm test` を走らせれば確認できます。
+
+**すべてが同期的です。** 書き込みは次の行が実行される前に確定します。マイクロタスクキューもなく、「1 tick待てば整合する」もありません。そのぶんテストしやすく、問題が起きたときも追いやすいです。
+
+**所有者より長く生き残るものはありません。** `memo` や `effect` の実行中に作られたものは、ネストしたeffectでも、クリーンアップ関数でも、引き受けたリソースでも、すべてその実行に属します。所有者が再実行されるか破棄されれば、まとめて再帰的に消えます。
+
+**速度をごまかしません。** 伝播は他と張り合えますが、生成はまだです。負けている数字も含めて、すべて[下に](#パフォーマンス)あります。
+
+---
+
+## インストール
 
 ```bash
-# npm の場合
 npm install @lenic/signal
-
-# pnpm の場合
 pnpm add @lenic/signal
-
-# yarn の場合
 yarn add @lenic/signal
 ```
 
 ---
 
-## 🛠️ API リファレンスとコード例
+## API
 
-### 1. `signal(initialValue)`
+関数は 4 つ。これで全部です。
 
-値を保持する読み書き可能な Signal を作成します。
+### `signal(initialValue, options?)`
 
-- **値の読み取り**: 作成した関数をそのまま呼び出します: `count()`
-- **値の書き込み**: `(newValue)` メソッドを使用します: `count(newValue)`
+読み書きできる値です。引数なしで呼べば読み取り、1 つ渡せば書き込みです。
 
 ```typescript
-import { signal } from '@lenic/signal';
-
 const count = signal(0);
 
-// 値の読み取り
-console.log(count()); // 出力: 0
-
-// 値の書き込み
-count(5);
-console.log(count()); // 出力: 5
+count();      // → 0     （読み取り）
+count(5);     // （書き込み）
+count();      // → 5
 ```
 
-### 2. `effect(fn)`
-
-サブスクライバーを作成し、即座に `fn` を実行して、アクセスされた Signal の依存関係を自動的に収集します。依存値が変更されるたびに、`fn` が自動的に再実行されます。
-
-- **戻り値**: 副作用の購読を解除し、リソースをクリーンアップする関数 `() => void`。
+現在の値と等しい値を書いても何も変わらず、誰にも通知されません。既定の判定は `===` で、厳しすぎるときは自前の比較関数を渡せます：
 
 ```typescript
-import { signal, effect } from '@lenic/signal';
+const deepEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const config = signal({ theme: 'dark' }, { comparer: deepEqual });
 
-const count = signal(0);
-const name = signal('山田');
+config({ theme: 'dark' });   // 新しいオブジェクトだが、下流は一つも再実行されない
+config({ theme: 'light' });  // こちらは伝播する
+```
 
-// 即座に "山田 のカウントは: 0" と出力されます
-const dispose = effect(() => {
-  console.log(`${name()} のカウントは: ${count()}`);
+### `memo(fn)`
+
+導出値です。誰かが読むまで実行されず、一度実行したら依存が実際に変わるまでキャッシュされます。
+
+```typescript
+const items = signal([1, 2, 3]);
+
+const total = memo(() => {
+  console.log('summing');
+  return items().reduce((a, b) => a + b, 0);
 });
 
-count(1); // 出力: "山田 のカウントは: 1"
-name('佐藤'); // 出力: "佐藤 のカウントは: 1"
+total();  // → 6、"summing" を出力
+total();  // → 6、出力なし — キャッシュ
 
-// 変更の追跡と自動反応を停止します
-dispose();
-
-count(2); // (何も出力されません)
+items([1, 2, 3, 4]);
+total();  // → 10、"summing" を出力
 ```
 
-### 3. `memo(fn)`
-
-遅延評価 (Lazy Evaluation) と結果のキャッシュ (Memoization) を行う読み取り専用の計算 Signal を作成します。
-
-- **遅延評価とキャッシュ**: 依存関係が変更され、**かつ**値が実際に読み取られたときにのみ再計算されます。
-- **戻り値**: `.dispose()` と `.disposeWithMe(disposable)` を含む読み取り専用の計算 Signal。
+再計算した値が変わらなければ、伝播はそこで止まります。上流がいくら動いても結果に影響しないなら、下流のコストはゼロです：
 
 ```typescript
-import { signal, memo } from '@lenic/signal';
+const n = signal(1);
+const isOdd = memo(() => n() % 2 === 1);
 
-const count = signal(10);
-const double = memo(() => {
-  console.log('計算中...'); // 依存関係が変更され、読み取られた時のみ実行
-  return count() * 2;
+effect(() => console.log(isOdd()));  // → true
+
+n(3);  // n は変わり isOdd も再計算されたが、結果は true のまま → effect は再実行されない
+```
+
+どこにも所有されていないmemoは、使い終わったら `total.dispose()` を呼んでください。
+
+### `effect(fn)`
+
+`fn` をすぐに実行し、読み取ったものを追跡して、それが変わるたびに再実行します。返ってくる関数で停止できます。
+
+```typescript
+const user = signal('ada');
+
+const stop = effect(() => {
+  document.title = user();
 });
 
-// 初回読み取り - 計算をトリガー
-console.log(double()); // 出力: "計算中..." -> 20
-
-// 2回目の読み取り - 再計算せずキャッシュされた値を返す
-console.log(double()); // 出力: 20
-
-// 依存シグナルの変更
-count(20);
-
-// 値が dirty（ダーティ）としてマークされ、次の読み取り時に再計算されます
-console.log(double()); // 出力: "計算中..." -> 40
-
-// サブスクリプションを破棄し、メモリを解放します
-double.dispose();
+user('grace');   // タイトルが更新される
+stop();
+user('katherine');  // 何も起きない
 ```
 
-### 4. `batch(action)`
+**初回実行は常に同期的です。** 生成時でも、バッチの中でも、別のeffectの中でも同じです。`effect()` が返る時点で本体は実行済みで、依存も有効になっています。
 
-複数の Signal 変更アクションを1つのブロック内にまとめ、ブロックの完了後に副作用を同期的に1回だけトリガーすることで、重複計算を防ぎます。
-
-- **実行メカニズム**: 純粋な同期処理。`batch` 内のアクションが完了した直後、`finally` ブロックで同期的に `flush()` が呼び出されます。
+**関数を返せば後片付けができます。** 次の再実行の直前に走り、effectが破棄されるときにもう一度走ります：
 
 ```typescript
-import { signal, effect, batch } from '@lenic/signal';
-
-const count = signal(0);
-const name = signal('A');
+const channel = signal('general');
 
 effect(() => {
-  console.log(`更新: ${name()} - ${count()}`);
-}); // 出力: "更新: A - 0"
+  const socket = connect(channel());
 
-// batch を使用して複数の更新を統合
+  return () => socket.close();
+});
+```
+
+### `batch(fn)`
+
+複数の書き込みをまとめ、下流には途中経過ではなく確定した結果だけを見せます。
+
+```typescript
+const width = signal(10);
+const height = signal(20);
+
+effect(() => console.log(width() * height()));  // → 200
+
 batch(() => {
-  name('B'); // まだエフェクトは実行されません
-  count(100); // まだエフェクトは実行されません
+  width(30);
+  height(40);
 });
-
-// 出力: "更新: B - 100" (バッチ終了時に同期的に1回だけ実行されます)
+// → 1200 が 1 回だけ — 600 のあとに 1200、ではない
 ```
+
+バッチ処理も同期的です。フラッシュは `batch()` が返る時点で起こり、後のtickに回されることはありません。書き込みが打ち消し合った場合（別の値にしてから戻した場合）は、下流は一度も実行されません。
 
 ---
 
-### 5. `setGlobalDeepComparator(comparator)`
+## ライフサイクル
 
-`comparator: 'deep'` オプションが指定されたシグナルで使用される、グローバルな深い比較関数を設定します。
-
-```typescript
-import { setGlobalDeepComparator, signal } from '@lenic/signal';
-
-// 深い比較関数（シンプルな JSON 文字列比較）
-const deepEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
-
-// グローバル深い比較関数を登録
-setGlobalDeepComparator(deepEqual);
-
-// deep 比較を使用するシグナル
-const obj = signal({ count: 1 }, { comparator: 'deep' });
-
-obj({ count: 1 }); // 深い等価なので購読者は通知されない
-obj({ count: 2 }); // 値が異なるので購読者がトリガーされる
-```
-
-> **注意**: comparator は純粋関数で、ブール値を返す深い等価判定を行う必要があります。
-
-## 🧹 厳密なメモリ管理とネストされた自動廃棄
-
-`@lenic/signal` は、ツリー構造の堅牢なスコープ廃棄機能を備えており、ネストされたリアクティブ構造を安全に管理できます。
-
-`Subscriber`（`effect` または `memo`）が別の親 `Subscriber` の実行コンテキスト内で作成された場合、その子サブスクライバーは親の配下に自動的に子ノードとして登録されます。親が再実行されるか、`.dispose()` によって破棄されると、配下のすべての子サブスクライバーも**再帰的に自動破棄**されます。
+`memo` や `effect` の実行中に作られたものは、すべてその実行に所有されます。
 
 ```typescript
-import { signal, effect } from '@lenic/signal';
+const outer = signal(0);
+const inner = signal(0);
 
-const outerSignal = signal(0);
-const innerSignal = signal(100);
+const stop = effect(() => {
+  outer();
 
-const disposeOuter = effect(() => {
-  console.log(`親 Signal: ${outerSignal()}`);
-
-  // ネストされた Effect: 自動的に親 'outer' 購読者の子として登録されます
-  effect(() => {
-    console.log(`子 Signal: ${innerSignal()}`);
-  });
+  effect(() => console.log('inner:', inner()));
 });
-// 初回出力:
-// "親 Signal: 0"
-// "子 Signal: 100"
 
-innerSignal(200); // 出力: "子 Signal: 200"
+inner(1);   // → "inner: 1"
 
-// 親のエフェクトを破棄すると、内部の子エフェクトも自動的にクリーンアップされます
-disposeOuter();
-
-innerSignal(300); // (出力なし。子エフェクトは親とともに安全に破棄され、メモリリークはありません)
+stop();     // ネストした effect も一緒に消える
+inner(2);   // 何も起きない
 ```
+
+所有者が単に再実行される場合も同じです。前回の実行の子は、新しい実行が代わりを作る前に破棄されます。溜まっていくことはありません。
 
 ---
 
-## 📄 ライセンス
+## しくみ
 
-このプロジェクトは [MIT ライセンス](file:///Users/leniclei/test-code/signal-engine/LICENSE) のもとでオープンソースとして公開されています。
+流れは 2 方向あり、どの部品もそのどちらか一方のために存在します。
+
+```mermaid
+flowchart LR
+    S(["signal / memo"]) -->|所有| L["<b>VersionLeader</b><br>バージョン · ダーティフラグ · follower"]
+    L -->|"ダーティにする"| F["<b>VersionFollower</b><br>読み手ひとつ分の受信箱"]
+    F -->|属する| R(["memo / effect"])
+    R -->|所有| C["<b>ConnectorManager</b><br>依存ごとに 1 スロット、<br>読み取り順で対応"]
+    C -->|"バージョンを記録"| L
+```
+
+右向き：読み手は自分が読んだものの**バージョン**を記録します。
+左向き：変化した供給側は自分のfollowerを**ダーティ**にします。
+
+ダーティの意味は「確認しに来い」であって「再計算しろ」ではありません。読み手は目を覚まし、記録したバージョンと現在のバージョンを突き合わせ、実際に動いたものがあるときだけ本体を実行します。結果が変わらなければ伝播がそこで止まるのは、このためです。
+
+書き込み 1 回の全体像：
+
+```mermaid
+flowchart TD
+    W["count(1)"] --> B{"バッチの中か？"}
+    B -->|いいえ| M["leader をダーティにする"]
+    B -->|はい| Q["値は即座に反映し、<br>ダーティはフラッシュまで保留"]
+    Q --> FL["バッチ終了"]
+    FL --> M
+    M --> P["follower をたどる"]
+    P --> MEMO["<b>memo</b>: 自分の leader をダーティに<br><i>この時点では何も再計算されない</i>"]
+    P --> EFF["<b>effect</b>: スケジュールに載せる"]
+    MEMO --> P
+    EFF --> RUN["フラッシュで実行"]
+    RUN --> CHK{"記録したバージョンで<br>動いたものはあるか？"}
+    CHK -->|ない| SKIP["スキップ：本体は実行されない"]
+    CHK -->|ある| GO["本体を実行し、<br>依存を追跡し直す"]
+```
+
+### 構成要素
+
+| | |
+| --- | --- |
+| `EqualComparer` | 値を保持し、何をもって「変化」とするかを決める |
+| `VersionLeader` | 読み取り可能な供給側：バージョン、ダーティフラグ、followerの一覧 |
+| `VersionFollower` | 読み手ひとつ分のダーティ受信箱 |
+| `ConnectorManager` | 読み手の依存スロット。読み取り順で対応するため、依存構成が安定していれば 1 回の読み取りにつき同一性チェック 1 回で済む |
+| `Schedulable` | signalに保留中の書き込みがあるか、effectに保留中の実行があるか |
+| `globalScheduler` | バッチを開き、キューを排出し、暴走した循環がプロセス全体を汚染するのを防ぐ |
+
+依存は**位置**で追跡されます。読み手のスロットは読み取り順に埋まるので、形の変わらないグラフはそれらをその場で再利用します。確保も帳簿付けも要りません。形が変わったときは食い違うスロットだけを繋ぎ直し、同じ供給側を 2 回読んだ場合は 1 回目が確保したスロットに畳み込まれます。
+
+---
+
+## パフォーマンス
+
+同じグラフ形状で、成熟した 3 つのリアクティブコアと比較しています。自分でも実行できます：
+
+```bash
+pnpm bench
+```
+
+Node v25.8.2、各セル 15 サンプルの中央値、単位はミリ秒。**小さいほど良い。**
+
+| シナリオ | **@lenic/signal** | @preact/signals-core | alien-signals | @vue/reactivity |
+| --- | --- | --- | --- | --- |
+| 深いチェーン（深さ 50、5k回書き込み） | 42.2 | 11.2 | **4.8** | 14.4 |
+| ファンアウト（1 供給源、100 memo） | 24.4 | 8.4 | **3.9** | 10.7 |
+| ダイヤモンド（幅 20、5k回書き込み） | 23.5 | 8.7 | **3.3** | 11.1 |
+| 動的依存（1 万回の分岐切り替え） | 8.7 | 2.6 | **1.6** | 2.8 |
+| 広い依存（100 signal、1 万回書き込み） | 20.0 | 12.9 | **10.7** | 16.6 |
+| キャッシュ読み取り（100 万回） | **5.3** | 5.8 | 6.4 | 8.4 |
+| 生成（signal+memo 2 万組） | 12.8 | 1.5 | **1.1** | 2.1 |
+| effect生成+破棄（2 万回） | 9.3 | 1.6 | **0.8** | 2.1 |
+| バッチ書き込み（2000 バッチ × 10） | 4.3 | 1.2 | **0.8** | n/a |
+
+**現在の位置。** 変化していないmemoの繰り返し読み取りは 4 つの中で最速です。広い依存構成での伝播は 2 倍以内、深いチェーンとファンアウトは 6〜9 倍です。弱点は生成で、およそ 12 倍。ここではsignal 1 つが 480 バイト、他のライブラリでは数十バイトです。値、バージョン管理、スケジューリングが 1 つのオブジェクトのフィールドではなく、3 つの独立した協力者になっているからです。
+
+この分割は意図的なもので、適合性テストを通せた理由でもあります。このエンジンで見つかった十数件の表に出ないバグは、これらの役割を個別に観測することで特定できました。生成コストの残りの差を埋めるにはそれらを統合することになりますが、その計算はどうしても合いません。生成はsignalごとに 1 回きり、伝播はずっと続きます。
+
+**注意点。** これらはアイドル状態のマシン上の合成グラフです。順位はグラフの形、更新頻度、ペイロードのサイズで変わりますし、数値は同一マシンの同一実行内でしか比較できません。`pnpm bench` は計測の前にすべてのライブラリが同じ挙動をすることを検証し、シナリオごとにチェックサムを突き合わせます。これがなければ、こっそり手を抜いたライブラリが最速に見えてしまいます。
+
+---
+
+## ステータス
+
+まだ `0.x` で、内部実装はマイナーバージョン間で動きます。公開されている 4 つの関数は安定しています。エクスポートされている機構（`VersionLeader`、`ConnectorManager`、`globalScheduler` など）はその上に何かを組み立てるためのもので、こちらは変わります。
+
+---
+
+## ライセンス
+
+[MIT](./LICENSE)
