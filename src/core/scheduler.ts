@@ -24,15 +24,13 @@ export const globalScheduler: IScheduler = {
 
     // Each write is captured on its own, so one failing comparer cannot strand the writes
     // queued behind it.
-    ErrorScope.getInstance().run((context) =>
-      this.pendingSignalUpdateList.clear((v) => context.capture(() => v.flush())),
-    );
+    ErrorScope.run((context) => this.pendingSignalUpdateList.clear((v) => context.capture(() => v.flush())));
   },
   batch(action: (context: IErrorScopeContext) => void, finalize?: () => void): void {
     const previous = this.isRunning;
     this.isRunning = true;
 
-    ErrorScope.getInstance().run(
+    ErrorScope.run(
       (context) => {
         iterativeLevel += 1;
 

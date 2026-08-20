@@ -219,7 +219,7 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
 
     // Every adopted resource must be released even when one of them throws, so each release
     // is captured individually and the collected errors are rethrown as one.
-    ErrorScope.getInstance().run(
+    ErrorScope.run(
       (context) => this._adoptedList.clear((release) => context.capture(release)),
       () => void (globalScheduler.connectorManager = previousManager),
     );
