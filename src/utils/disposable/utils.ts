@@ -1,16 +1,15 @@
 import { IDisposable } from './types';
 
 /**
- * Whether it is a disposable
- * @param disposable - The disposable to check
- * @returns Whether it is a disposable
+ * Checks whether a value is a disposable object.
+ *
+ * A value is disposable when it has a `dispose` method that takes no arguments.
+ * Everything else returns `false`, including `null`, `undefined`, and primitive
+ * values such as numbers and strings. This function never throws.
+ *
+ * @param value The value to check
+ * @returns `true` if the value has a `dispose()` method that takes no arguments
  */
-export function isDisposable(disposable: any): disposable is IDisposable {
-  return (
-    'dispose' in disposable &&
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    typeof disposable.dispose === 'function' &&
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    disposable.dispose.length === 0
-  );
+export function isDisposable(value: any): value is IDisposable {
+  return typeof value?.dispose === 'function' && value.dispose.length === 0;
 }

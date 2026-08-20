@@ -61,7 +61,7 @@ export class VersionLeader extends DirtyMarkable implements IVersionLeader {
   }
 
   appendFollower(follower: IVersionFollower): () => void {
-    this.checkDisposed();
+    this.assertNotDisposed();
 
     const followers = (this._followers ??= new LinkedList<IVersionFollower>());
     let node: ILinkedNode<IVersionFollower> | null = followers.append(follower);

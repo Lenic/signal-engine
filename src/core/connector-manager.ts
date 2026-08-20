@@ -39,7 +39,7 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
   }
 
   run(): T {
-    this.checkDisposed();
+    this.assertNotDisposed();
 
     if (this._isExecuting) {
       throw new Error('[ConnectorManager]: can not run iteratively.');
