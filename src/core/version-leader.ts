@@ -60,13 +60,10 @@ export class VersionLeader extends DirtyMarkable implements IVersionLeader {
     this._trackedSnapshot = snapshot;
   }
 
-  appendFollower(follower: IVersionFollower): () => void {
+  appendFollower(follower: IVersionFollower): ILinkedNode<IVersionFollower> {
     this.assertNotDisposed();
 
     const followers = (this._followers ??= new LinkedList<IVersionFollower>());
-    let node: ILinkedNode<IVersionFollower> | null = followers.append(follower);
-
-    node.onRemoved = () => void (node = null);
-    return () => node?.removeSelf();
+    return followers.append(follower);
   }
 }

@@ -1,4 +1,4 @@
-import { IDisposable, IErrorScopeContext, ILinkedList } from '../utils';
+import { IDisposable, IErrorScopeContext, ILinkedList, ILinkedNode } from '../utils';
 
 export interface IObjectOptions {
   name?: string;
@@ -83,7 +83,7 @@ export interface IVersionLeader extends IDirtyMarkable, ITrackMarkable, IDisposa
   readonly version: number;
 
   confirm(): number;
-  appendFollower(follower: IVersionFollower): () => void;
+  appendFollower(follower: IVersionFollower): ILinkedNode<IVersionFollower>;
 }
 
 export interface ISnapshot<T> {
@@ -93,7 +93,7 @@ export interface ISnapshot<T> {
 
 export interface IConnector {
   snapshot: ISnapshot<IVersionLeader>;
-  unsubscribe: () => void;
+  followerNode: ILinkedNode<IVersionFollower>;
 }
 
 export interface IConnectorManager<T = void> extends IDisposable {

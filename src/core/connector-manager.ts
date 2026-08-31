@@ -87,7 +87,7 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
         while (this._current) {
           const next = this._current.next;
 
-          this._current.value.unsubscribe();
+          this._current.value.followerNode.removeSelf();
           this._current.removeSelf();
           this._current = next;
         }
@@ -139,19 +139,19 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
 
       const snapshot: ISnapshot<IVersionLeader> = { instance: leader, version };
 
-      this._list.append({ snapshot, unsubscribe: leader.appendFollower(this._follower) });
+      this._list.append({ snapshot, followerNode: leader.appendFollower(this._follower) });
       leader.markTracked(this._trackToken, snapshot);
       this._current = null;
       return;
     }
 
-    current.value.unsubscribe();
+    current.value.followerNode.removeSelf();
     const version = this.confirmWhileAlive(leader);
     if (version === null) return;
 
     const snapshot: ISnapshot<IVersionLeader> = { instance: leader, version };
 
-    current.value = { snapshot, unsubscribe: leader.appendFollower(this._follower) };
+    current.value = { snapshot, followerNode: leader.appendFollower(this._follower) };
     leader.markTracked(this._trackToken, snapshot);
     this._current = current.next;
   }
@@ -184,7 +184,7 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
     // into an orphaned snapshot - it claims a real slot and subscribes again.
     this._trackToken = ++trackTokenSeq;
 
-    this._list.clear((v) => v.unsubscribe());
+    this._list.clear((v) => v.followerNode.removeSelf());
   }
 
   dispose() {
