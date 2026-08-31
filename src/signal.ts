@@ -67,7 +67,7 @@ export function signal<T>(initialValue: T, options?: ISignalOptions<T>): ISignal
       } else if (updater) {
         updater.targetValue = nextValue;
       }
-      comparer.setValue(nextValue);
+      comparer.forceValue(nextValue);
     }
   }
 

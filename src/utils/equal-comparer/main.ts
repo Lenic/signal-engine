@@ -32,10 +32,17 @@ export class EqualComparer<T> extends Disposable implements IEqualComparer<T> {
   }
 
   setValue(candidate: T): boolean {
-    if (this._value !== DEFAULT_VALUE && this._comparer(this._value, candidate)) return false;
+    if (this._value !== DEFAULT_VALUE) {
+      if (this._value === candidate) return false;
+      if (this._comparer(this._value, candidate)) return false;
+    }
 
     this._value = candidate;
     return true;
+  }
+
+  forceValue(candidate: T): void {
+    this._value = candidate;
   }
 
   isEqual(a: T, b: T): boolean {
