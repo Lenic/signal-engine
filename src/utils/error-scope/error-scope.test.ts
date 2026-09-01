@@ -2,11 +2,38 @@ import { describe, expect, test } from 'vitest';
 import { ErrorScope } from './main';
 import type { IErrorScopeContext } from './types';
 
+/**
+ * `ErrorScope` only exposes `begin`/`end` now - every production caller wraps its own work in a
+ * `try`/`finally` around them instead of handing a closure to a fused `run(callback, finalize)`.
+ * This test-only helper restores that shape purely so the tests below stay readable, without
+ * reintroducing `run` into the library itself.
+ */
+function runScope(callback: (context: IErrorScopeContext) => void, finalize?: () => void): void {
+  const context = ErrorScope.begin();
+  try {
+    try {
+      callback(context);
+    } catch (e) {
+      context.push(e);
+    }
+
+    if (finalize) {
+      try {
+        finalize();
+      } catch (e) {
+        context.push(e);
+      }
+    }
+  } finally {
+    ErrorScope.end(context);
+  }
+}
+
 describe('ErrorScope', () => {
-  test('a run with nothing to report throws nothing', () => {
+  test('a scope with nothing to report throws nothing', () => {
     let ran = 0;
 
-    expect(() => ErrorScope.run(() => void ran++)).not.toThrow();
+    expect(() => runScope(() => void ran++)).not.toThrow();
     expect(ran).toBe(1);
   });
 
@@ -14,35 +41,44 @@ describe('ErrorScope', () => {
     const boom = new Error('boom');
 
     expect(() =>
-      ErrorScope.run((context) => {
-        context.capture(() => {
+      runScope((context) => {
+        try {
           throw boom;
-        });
+        } catch (e) {
+          context.push(e);
+        }
       }),
     ).toThrow(boom);
   });
 
-  test('captured actions all run, and their errors are reported together', () => {
+  test('errors from separate steps are all reported together', () => {
     const order: string[] = [];
     let caught: unknown;
 
     try {
-      ErrorScope.run((context) => {
-        context.capture(() => {
+      runScope((context) => {
+        try {
           order.push('first');
           throw new Error('first failed');
-        });
-        context.capture(() => void order.push('second'));
-        context.capture(() => {
+        } catch (e) {
+          context.push(e);
+        }
+
+        order.push('second');
+
+        try {
           order.push('third');
           throw new Error('third failed');
-        });
+        } catch (e) {
+          context.push(e);
+        }
       });
     } catch (e) {
       caught = e;
     }
 
-    // The point of capturing: a failure does not stop the actions queued behind it.
+    // The point of catching each step on its own: a failure does not stop the steps queued
+    // behind it.
     expect(order).toEqual(['first', 'second', 'third']);
     expect(caught).toBeInstanceOf(AggregateError);
     expect((caught as AggregateError).errors.map((e) => (e as Error).message)).toEqual([
@@ -54,14 +90,14 @@ describe('ErrorScope', () => {
   test('finalize runs whether the callback succeeded or threw', () => {
     let finalized = 0;
 
-    ErrorScope.run(
+    runScope(
       () => {},
       () => void finalized++,
     );
     expect(finalized).toBe(1);
 
     expect(() =>
-      ErrorScope.run(
+      runScope(
         () => {
           throw new Error('callback failed');
         },
@@ -75,7 +111,7 @@ describe('ErrorScope', () => {
     let caught: unknown;
 
     try {
-      ErrorScope.run(
+      runScope(
         () => {
           throw new Error('callback failed');
         },
@@ -99,16 +135,18 @@ describe('ErrorScope', () => {
     // for whoever picks that scope up next.
     for (let i = 0; i < 20; i++) {
       expect(() =>
-        ErrorScope.run((context) => {
-          context.capture(() => {
+        runScope((context) => {
+          try {
             throw new Error('failure ' + i);
-          });
+          } catch (e) {
+            context.push(e);
+          }
         }),
       ).toThrow('failure ' + i);
     }
 
     let ran = 0;
-    expect(() => ErrorScope.run(() => void ran++)).not.toThrow();
+    expect(() => runScope(() => void ran++)).not.toThrow();
     expect(ran).toBe(1);
   });
 
@@ -117,27 +155,35 @@ describe('ErrorScope', () => {
     let outerCaught: unknown;
 
     try {
-      ErrorScope.run((outer) => {
-        outer.capture(() => {
-          // An inner scope reports on its own; the outer one only ever sees what escapes it.
+      runScope((outer) => {
+        // An inner scope reports on its own; the outer one only ever sees what escapes it.
+        try {
           try {
-            ErrorScope.run((inner) => {
-              inner.capture(() => {
+            runScope((inner) => {
+              try {
                 throw new Error('inner-a');
-              });
-              inner.capture(() => {
+              } catch (e) {
+                inner.push(e);
+              }
+              try {
                 throw new Error('inner-b');
-              });
+              } catch (e) {
+                inner.push(e);
+              }
             });
           } catch (e) {
             seen.push((e as AggregateError).errors.map((x) => (x as Error).message).join('+'));
             throw new Error('inner rolled up');
           }
-        });
+        } catch (e) {
+          outer.push(e);
+        }
 
-        outer.capture(() => {
+        try {
           throw new Error('outer-a');
-        });
+        } catch (e) {
+          outer.push(e);
+        }
       });
     } catch (e) {
       outerCaught = e;
@@ -152,7 +198,7 @@ describe('ErrorScope', () => {
 
   test('a scope is never handed to two runs at once', () => {
     const nest = (depth: number, live: Set<IErrorScopeContext>) => {
-      ErrorScope.run((context) => {
+      runScope((context) => {
         // Reuse is by nesting depth, so an outer run's scope must never be the one an inner run
         // is given - that is the aliasing a pool has to rule out.
         expect(live.has(context)).toBe(false);
@@ -170,7 +216,7 @@ describe('ErrorScope', () => {
   test('runs at the same depth reuse the same scope', () => {
     const collect = () => {
       let seen: IErrorScopeContext | undefined;
-      ErrorScope.run((context) => void (seen = context));
+      runScope((context) => void (seen = context));
       return seen;
     };
 
@@ -181,7 +227,7 @@ describe('ErrorScope', () => {
     // A run that throws still returns its scope, so the next one at that depth picks it up again.
     const first = collect();
     expect(() =>
-      ErrorScope.run(() => {
+      runScope(() => {
         throw new Error('boom');
       }),
     ).toThrow('boom');
@@ -191,14 +237,13 @@ describe('ErrorScope', () => {
   test('a context used after its run has ended throws instead of writing somewhere else', () => {
     let leaked: IErrorScopeContext | undefined;
 
-    ErrorScope.run((context) => void (leaked = context));
+    runScope((context) => void (leaked = context));
 
     expect(() => leaked!.push(new Error('late'))).toThrow('[ErrorScope]: context used outside its scope.');
-    expect(() => leaked!.capture(() => {})).toThrow('[ErrorScope]: context used outside its scope.');
 
-    // The escaped writes went nowhere, so the scope is still clean for its next legitimate run.
+    // The escaped write went nowhere, so the scope is still clean for its next legitimate run.
     let ran = 0;
-    expect(() => ErrorScope.run(() => void ran++)).not.toThrow();
+    expect(() => runScope(() => void ran++)).not.toThrow();
     expect(ran).toBe(1);
   });
 
@@ -206,13 +251,17 @@ describe('ErrorScope', () => {
     let caught: unknown;
 
     try {
-      ErrorScope.run((context) => {
-        context.capture(() => {
+      runScope((context) => {
+        try {
           throw new Error('a');
-        });
-        context.capture(() => {
+        } catch (e) {
+          context.push(e);
+        }
+        try {
           throw new Error('b');
-        });
+        } catch (e) {
+          context.push(e);
+        }
       });
     } catch (e) {
       caught = e;
@@ -224,17 +273,40 @@ describe('ErrorScope', () => {
     // The same scope runs again and reports again. `AggregateError` keeps the array it was given,
     // so the scope has to start over with a fresh one rather than empty that array in place.
     expect(() =>
-      ErrorScope.run((context) => {
-        context.capture(() => {
+      runScope((context) => {
+        try {
           throw new Error('c');
-        });
-        context.capture(() => {
+        } catch (e) {
+          context.push(e);
+        }
+        try {
           throw new Error('d');
-        });
+        } catch (e) {
+          context.push(e);
+        }
       }),
     ).toThrow(AggregateError);
 
     expect((caught as AggregateError).errors).toBe(errors);
     expect(errors.map((e) => (e as Error).message)).toEqual(['a', 'b']);
+  });
+
+  test('begin/end pairs correctly without a callback wrapper', () => {
+    // The production shape: no closure around the work at all, just a plain try/finally.
+    const context = ErrorScope.begin();
+    let ran = false;
+    try {
+      ran = true;
+    } finally {
+      ErrorScope.end(context);
+    }
+    expect(ran).toBe(true);
+  });
+
+  test('end throws whatever was pushed before it was called', () => {
+    const context = ErrorScope.begin();
+    context.push(new Error('pushed before end'));
+
+    expect(() => ErrorScope.end(context)).toThrow('pushed before end');
   });
 });

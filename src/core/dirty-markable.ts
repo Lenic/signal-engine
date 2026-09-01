@@ -8,16 +8,12 @@ export class DirtyMarkable extends Disposable implements IDirtyMarkable {
 
   onDirty: (() => void) | null;
 
-  private _notifyDirtyBound: () => void;
-
   constructor(isDirty: boolean, name?: string) {
     super();
 
     this._name = name;
     this._isDirty = isDirty;
     this.onDirty = null;
-
-    this._notifyDirtyBound = this.notifyDirty.bind(this);
   }
 
   get name(): string | undefined {
@@ -32,8 +28,20 @@ export class DirtyMarkable extends Disposable implements IDirtyMarkable {
     if (this._isDirty) return;
 
     this._isDirty = true;
+
     // Turning dirty can put effects on the schedule, and those have to land inside a batch.
-    globalScheduler.runBatched(this._notifyDirtyBound);
+    const previousRunning = globalScheduler.isRunning;
+    globalScheduler.isRunning = true;
+
+    const context = globalScheduler.beginBatch();
+    try {
+      this.notifyDirty();
+    } catch (e) {
+      context.push(e);
+    } finally {
+      globalScheduler.isRunning = previousRunning;
+      globalScheduler.endBatch(context);
+    }
   }
 
   /**

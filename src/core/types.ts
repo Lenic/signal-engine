@@ -130,15 +130,47 @@ export interface IScheduler {
   pendingSignalUpdateList: ILinkedList<IPendingSignalUpdate>;
   scheduledConnectorManagerList: ILinkedList<IConnectorManager>;
 
+  /**
+   * The context the innermost open `beginBatch`/`batch` is currently collecting into, or `null`
+   * when no batch is open. Lets a caller that isn't holding the context itself - `confirm()`,
+   * reached indirectly through a `VersionLeader` rather than handed one - check `hasErrors`
+   * around a step it doesn't control the try/catch of.
+   *
+   * A plain field, kept in step by `beginBatch`/`endBatch` rather than computed by a getter -
+   * `globalScheduler` is read on every signal and memo access, and an accessor property here
+   * measurably slows down *every* property read on the object, not just this one. Treat it as
+   * read-only from outside `beginBatch`/`endBatch`.
+   */
+  currentContext: IErrorScopeContext | null;
+
   batch(action: (context: IErrorScopeContext) => void, finalize?: () => void): void;
 
   /**
-   * Runs an action with the guarantee that a batch is open around it, opening one only when
-   * there is not already one running. Meant for callers that just need their notifications to
-   * be collected and flushed - not for anything that needs to isolate failures of its own, which
-   * has to go through `batch` and use the error scope it hands out.
+   * Opens a batch and hands back the context that collects its errors, without wrapping the
+   * caller's work in a closure to do it.
+   *
+   * Pairs with `endBatch`. Meant for a caller that recurses through several synchronous frames -
+   * `ConnectorManager.run()` confirming a chain of dependencies, `markDirty()` propagating - where
+   * `batch()` would force every frame to allocate a closure just to hand its work to `batch()`.
+   * Call this once per frame, do the work inline with a plain `try`, and pass the context to
+   * `endBatch` in a `finally`. Nested calls are cheap: only the outermost one actually runs the
+   * flush loop or reports errors, mirrored by `IErrorScopeContext.hasErrors` letting an inner
+   * frame notice a failure lower in the chain without needing that failure to propagate as an
+   * exception.
    */
-  runBatched(action: () => void): void;
+  beginBatch(): IErrorScopeContext;
+
+  /**
+   * Closes a batch opened by `beginBatch`.
+   *
+   * Only the outermost `beginBatch`/`endBatch` pair actually flushes and reports; a nested one is
+   * just bookkeeping. `context` must be the value `beginBatch` returned - contexts are only ever
+   * manufactured by it.
+   *
+   * @throws Whatever the batch collected, once the outermost pair closes. A nested call throws
+   * nothing on its own.
+   */
+  endBatch(context: IErrorScopeContext): void;
 
   /**
    * Applies every write the running batch has queued so far. A write takes effect on the value
