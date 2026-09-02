@@ -1,6 +1,6 @@
 import { globalScheduler, IPendingSignalUpdate, Schedulable, VersionLeader } from './core';
 import { ISignalOptions, ISignalValue } from './types';
-import { EqualComparer } from './utils';
+import { defaultEqualComparer, EqualComparer } from './utils';
 
 interface IPendingSignalValueUpdate<T> extends IPendingSignalUpdate {
   targetValue: T;
@@ -9,7 +9,8 @@ interface IPendingSignalValueUpdate<T> extends IPendingSignalUpdate {
 const defaultPendingValue = Symbol('default_pending_value');
 
 export function signal<T>(initialValue: T, options?: ISignalOptions<T>): ISignalValue<T> {
-  const comparer = new EqualComparer(options?.comparer, options?.name ? `signal-comparer-${options?.name}` : undefined);
+  const currentComparer = options?.comparer ?? defaultEqualComparer;
+  const comparer = new EqualComparer(currentComparer, options?.name ? `signal-comparer-${options?.name}` : undefined);
   const leader = new VersionLeader({
     isDirty: false,
     name: options?.name ? `signal-leader-${options?.name}` : undefined,
@@ -37,7 +38,7 @@ export function signal<T>(initialValue: T, options?: ISignalOptions<T>): ISignal
         const entry = updater!;
         updater = null;
 
-        if (!comparer.isEqual(baselineValue, entry.targetValue)) {
+        if (!currentComparer(baselineValue, entry.targetValue)) {
           leader.markDirty();
         }
       },
@@ -67,7 +68,7 @@ export function signal<T>(initialValue: T, options?: ISignalOptions<T>): ISignal
       } else if (updater) {
         updater.targetValue = nextValue;
       }
-      comparer.forceValue(nextValue);
+      comparer.setValueDirectly(nextValue);
     }
   }
 

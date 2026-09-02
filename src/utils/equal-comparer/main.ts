@@ -1,7 +1,7 @@
 import { Disposable } from '../disposable';
 import { IEqualComparer } from './types';
 
-function defaultComparer<T>(x: T, y: T): boolean {
+export function defaultEqualComparer<T>(x: T, y: T): boolean {
   return x === y;
 }
 
@@ -17,7 +17,7 @@ export class EqualComparer<T> extends Disposable implements IEqualComparer<T> {
 
     this._name = name;
     this._value = DEFAULT_VALUE;
-    this._comparer = comparer ?? defaultComparer;
+    this._comparer = comparer ?? defaultEqualComparer;
   }
 
   get name(): string | undefined {
@@ -41,11 +41,7 @@ export class EqualComparer<T> extends Disposable implements IEqualComparer<T> {
     return true;
   }
 
-  forceValue(candidate: T): void {
+  setValueDirectly(candidate: T): void {
     this._value = candidate;
-  }
-
-  isEqual(a: T, b: T): boolean {
-    return this._comparer(a, b);
   }
 }
