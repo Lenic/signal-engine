@@ -41,7 +41,7 @@ rest.
 [`reactive-framework-test-suite`](https://www.npmjs.com/package/reactive-framework-test-suite)
 is 179 cases covering glitch-freedom, dynamic dependencies, batching, disposal ordering, cycle
 detection and error recovery. Those are the corners where reactive engines differ in ways nobody
-documents. This one passes **179 / 179 with nothing skipped**, plus 85 tests of its own. Run
+documents. This one passes **179 / 179 with nothing skipped**, plus 90 tests of its own. Run
 `pnpm test` and check.
 
 **Everything is synchronous.** A write settles before the next line of your code runs. No
@@ -274,25 +274,26 @@ Measured against three mature reactive cores on the same graphs. Run it yourself
 pnpm bench
 ```
 
-Node v25.8.2, 15 samples per cell, median, milliseconds. **Lower is better.**
+Node v25.8.2, three runs of 15 samples per cell, median of the three medians, milliseconds.
+**Lower is better.**
 
 | Scenario | **@lenic/signal** | @preact/signals-core | alien-signals | @vue/reactivity |
 | --- | --- | --- | --- | --- |
-| deep chain (depth 50, 5k writes) | 42.2 | 11.2 | **4.8** | 14.4 |
-| fan-out (1 source, 100 memos) | 24.4 | 8.4 | **3.9** | 10.7 |
-| diamond (width 20, 5k writes) | 23.5 | 8.7 | **3.3** | 11.1 |
-| dynamic deps (10k branch switches) | 8.7 | 2.6 | **1.6** | 2.8 |
-| wide sources (100 signals, 10k writes) | 20.0 | 12.9 | **10.7** | 16.6 |
-| cached reads (1M reads) | **5.3** | 5.8 | 6.4 | 8.4 |
+| deep chain (depth 50, 5k writes) | 25.0 | 11.2 | **4.8** | 14.4 |
+| fan-out (1 source, 100 memos) | 18.2 | 8.2 | **4.0** | 10.7 |
+| diamond (width 20, 5k writes) | 11.4 | 9.0 | **4.3** | 11.2 |
+| dynamic deps (10k branch switches) | 5.3 | 2.4 | **1.6** | 3.6 |
+| wide sources (100 signals, 10k writes) | 18.6 | 12.9 | **11.0** | 16.3 |
+| cached reads (1M reads) | **5.3** | 5.8 | 5.6 | 8.5 |
 | creation (20k signal+memo pairs) | 12.8 | 1.5 | **1.1** | 2.1 |
-| effect create+dispose (20k) | 9.3 | 1.6 | **0.8** | 2.1 |
-| batched writes (2k × 10) | 4.3 | 1.2 | **0.8** | n/a |
+| effect create+dispose (20k) | 9.1 | 1.5 | **0.8** | 2.0 |
+| batched writes (2k × 10) | 5.0 | 1.2 | **0.8** | n/a |
 
 **Where it stands.** Repeated reads of an unchanged memo are the fastest of the four. Propagation
-through a wide dependency set is within 2×. Deep chains and fan-out sit at 6 to 9×. Construction
-is the weak spot at roughly 12×: a signal costs 480 bytes here against a few dozen elsewhere,
-because value, versioning and scheduling are three separate collaborators rather than fields on
-one object.
+through a wide dependency set is within 1.7×; a diamond is 2.7× and a dynamic-dependency switch
+3.3×. Deep chains and fan-out sit at around 5×. Construction is the weak spot at roughly 12×: a
+signal costs 472 bytes here against 88 to 160 elsewhere, because value, versioning and scheduling
+are three separate collaborators rather than fields on one object.
 
 That split is deliberate, and it is what made the conformance run reachable. Watching those roles
 independently is how a dozen silent bugs in this engine turned up. Closing the last of the
@@ -303,7 +304,9 @@ happens once per signal, propagation happens forever.
 update frequency and payload size. Numbers are comparable only within one run on one machine.
 `pnpm bench` verifies that every library agrees on behaviour before it times anything, and
 compares a checksum per scenario. Without that, a library quietly doing less work would look like
-the fastest one here.
+the fastest one here. Individual cells swing by a third between runs - diamond, batched writes and
+effect create+dispose most of all - which is why the table above is a median across three separate
+runs rather than one.
 
 ---
 
