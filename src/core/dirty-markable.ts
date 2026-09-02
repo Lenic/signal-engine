@@ -28,8 +28,31 @@ export class DirtyMarkable extends Disposable implements IDirtyMarkable {
     if (this._isDirty) return;
 
     this._isDirty = true;
+
+    // A batch already open around us is a batch already open around whoever called us too - a
+    // failure here propagates straight into their own try/catch (or the outermost one, if it
+    // takes that many frames), the same place it would land if this call opened its own
+    // beginBatch/endBatch pair and immediately deferred to a context nobody but the outermost
+    // frame actually owns. Skipping that pair here isn't just fewer method calls: this is one of
+    // the hottest calls in the library, made once per dependency on every dirty propagation, and
+    // paying for it unconditionally is what a batched write with many signals feels first.
+    if (globalScheduler.isRunning) {
+      this.notifyDirty();
+      return;
+    }
+
     // Turning dirty can put effects on the schedule, and those have to land inside a batch.
-    globalScheduler.runBatched(() => this.notifyDirty());
+    globalScheduler.isRunning = true;
+
+    const context = globalScheduler.beginBatch();
+    try {
+      this.notifyDirty();
+    } catch (e) {
+      context.push(e);
+    } finally {
+      globalScheduler.isRunning = false;
+      globalScheduler.endBatch(context);
+    }
   }
 
   /**

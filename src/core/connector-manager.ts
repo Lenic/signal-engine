@@ -1,4 +1,13 @@
-import { Disposable, ErrorScope, IDisposable, ILinkedList, ILinkedNode, isDisposable, LinkedList } from '../utils';
+import {
+  Disposable,
+  IDisposable,
+  IErrorScopeContext,
+  ILinkedList,
+  ILinkedNode,
+  isDisposable,
+  LinkedList,
+  ScopeAbortSignal,
+} from '../utils';
 import { globalScheduler } from './scheduler';
 import { IConnector, IConnectorManager, ISnapshot, IVersionFollower, IVersionLeader } from './types';
 
@@ -39,7 +48,7 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
   }
 
   run(): T {
-    this.checkDisposed();
+    this.assertNotDisposed();
 
     if (this._isExecuting) {
       throw new Error('[ConnectorManager]: can not run iteratively.');
@@ -52,53 +61,65 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
     globalScheduler.connectorManager = this;
 
     let result: T;
-    globalScheduler.batch(
-      (context) => {
-        if (!this.shouldRecompute()) return;
+    const context = globalScheduler.beginBatch();
+    const hadErrorsBefore = context.hasErrors;
+    try {
+      if (this.shouldRecompute(context)) {
         this._isInitialized = true;
 
         // The previous run's resources belong to the previous run only. Release them before
         // the action produces a new generation, so the two never overlap. Captured, because a
         // failing cleanup must not prevent this recomputation.
-        context.capture(() => this.disposeAdopted());
+        try {
+          this.disposeAdopted();
+        } catch (e) {
+          context.push(e);
+        }
+
         // A cleanup is allowed to dispose this manager. That ends the run: there is no new
         // generation left to produce, and `_list` is already gone.
-        if (this.isDisposed) return;
+        if (!this.isDisposed) {
+          this._current = this._list.head;
+          this._trackToken = ++trackTokenSeq;
 
-        this._current = this._list.head;
-        this._trackToken = ++trackTokenSeq;
+          // Guards the action against re-entering *itself* - a memo whose body reads its own
+          // value, or two memos reading each other. The window is deliberately just the action:
+          // once it has returned, this same manager may legitimately be run again from the flush
+          // loop nested inside this very `run` - that is how an effect that writes its own
+          // dependency gets its follow-up execution.
+          this._isExecuting = true;
+          try {
+            result = this._action();
+          } catch (e) {
+            context.push(e);
+          }
+          this._isExecuting = false;
 
-        // Guards the action against re-entering *itself* - a memo whose body reads its own
-        // value, or two memos reading each other. The window is deliberately just the action:
-        // once it has returned, this same manager may legitimately be run again from the flush
-        // loop nested inside this very `run` - that is how an effect that writes its own
-        // dependency gets its follow-up execution.
-        this._isExecuting = true;
-        context.capture(() => void (result = this._action()));
-        this._isExecuting = false;
+          // Same for the action itself - disposing mid-run is a lifecycle event, not an error.
+          if (!this.isDisposed) {
+            // Slots the action did not claim this time belong to dependencies it no longer reads.
+            // `next` is captured before the node goes: `removeSelf` scrubs its links, so reading
+            // `next` afterwards would always be `null` and the loop would drop a single node no
+            // matter how many the run left behind.
+            while (this._current) {
+              const next = this._current.next;
 
-        // Same for the action itself - disposing mid-run is a lifecycle event, not an error.
-        if (this.isDisposed) return;
-
-        // Slots the action did not claim this time belong to dependencies it no longer reads.
-        // `next` is captured before the node goes: `removeSelf` scrubs its links, so reading
-        // `next` afterwards would always be `null` and the loop would drop a single node no
-        // matter how many the run left behind.
-        while (this._current) {
-          const next = this._current.next;
-
-          this._current.value.unsubscribe();
-          this._current.removeSelf();
-          this._current = next;
+              this._current.value.followerNode.removeSelf();
+              this._current.removeSelf();
+              this._current = next;
+            }
+          }
         }
-      },
-      () => {
-        this._isExecuting = false;
+      }
+    } finally {
+      this._isExecuting = false;
 
-        globalScheduler.isRunning = previousRunning;
-        globalScheduler.connectorManager = previousManager;
-      },
-    );
+      globalScheduler.isRunning = previousRunning;
+      globalScheduler.connectorManager = previousManager;
+
+      globalScheduler.endBatch(context);
+      this.throwIfNewlyFailed(context, hadErrorsBefore);
+    }
     return result!;
   }
 
@@ -139,19 +160,19 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
 
       const snapshot: ISnapshot<IVersionLeader> = { instance: leader, version };
 
-      this._list.append({ snapshot, unsubscribe: leader.appendFollower(this._follower) });
+      this._list.append({ snapshot, followerNode: leader.appendFollower(this._follower) });
       leader.markTracked(this._trackToken, snapshot);
       this._current = null;
       return;
     }
 
-    current.value.unsubscribe();
+    current.value.followerNode.removeSelf();
     const version = this.confirmWhileAlive(leader);
     if (version === null) return;
 
     const snapshot: ISnapshot<IVersionLeader> = { instance: leader, version };
 
-    current.value = { snapshot, unsubscribe: leader.appendFollower(this._follower) };
+    current.value = { snapshot, followerNode: leader.appendFollower(this._follower) };
     leader.markTracked(this._trackToken, snapshot);
     this._current = current.next;
   }
@@ -170,6 +191,29 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
     return this.isDisposed ? null : version;
   }
 
+  /**
+   * Signals a *nested* `run()` call's own failure to whoever is waiting on its result -
+   * `VersionLeader.confirm()`, `shouldRecompute`'s scan of another manager - by throwing instead
+   * of returning as if `result` were good. Split out of `run()` itself, which is - along with
+   * `confirm()` - among the hottest functions in the library: keeping this check out of its body
+   * avoids the extra size costing the far more common case where nothing failed at all.
+   *
+   * `hadErrorsBefore` scopes this to a failure from *this* call: a context that already had
+   * errors before it started is left alone, so an unrelated earlier failure elsewhere in the same
+   * batch does not also abort an otherwise-clean run.
+   *
+   * The outermost pair reports differently: `endBatch` itself throws the batch's real, aggregated
+   * error (closing the context in the process), or returns having closed it with nothing to
+   * report. Either way `globalScheduler.currentContext` no longer points at `context` by the time
+   * this runs, which is what tells it to do nothing rather than read a context that is no longer
+   * open.
+   */
+  private throwIfNewlyFailed(context: IErrorScopeContext, hadErrorsBefore: boolean): void {
+    if (globalScheduler.currentContext === context && !hadErrorsBefore && context.hasErrors) {
+      throw ScopeAbortSignal.instance;
+    }
+  }
+
   adopt(disposable: IDisposable | (() => void)): void {
     // Same reasoning as `track`: an already-disposed manager has no run left to bind a
     // resource to, so the request is ignored rather than rejected.
@@ -184,7 +228,7 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
     // into an orphaned snapshot - it claims a real slot and subscribes again.
     this._trackToken = ++trackTokenSeq;
 
-    this._list.clear((v) => v.unsubscribe());
+    this._list.clear((v) => v.followerNode.removeSelf());
   }
 
   dispose() {
@@ -217,15 +261,27 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
     const previousManager = globalScheduler.connectorManager;
     globalScheduler.connectorManager = undefined;
 
-    // Every adopted resource must be released even when one of them throws, so each release
-    // is captured individually and the collected errors are rethrown as one.
-    ErrorScope.getInstance().run(
-      (context) => this._adoptedList.clear((release) => context.capture(release)),
-      () => void (globalScheduler.connectorManager = previousManager),
-    );
+    // Every adopted resource must be released even when one of them throws, so each release is
+    // caught individually and the collected errors are rethrown as one. Uses beginBatch/endBatch
+    // rather than ErrorScope directly: called from inside run(), which already has a context open,
+    // this reuses it - flat aggregation, and no separate scope to open - instead of opening its
+    // own nested one. Called standalone from dispose(), it still gets a real scope of its own.
+    const context = globalScheduler.beginBatch();
+    try {
+      this._adoptedList.clear((release) => {
+        try {
+          release();
+        } catch (e) {
+          context.push(e);
+        }
+      });
+    } finally {
+      globalScheduler.connectorManager = previousManager;
+      globalScheduler.endBatch(context);
+    }
   }
 
-  private shouldRecompute() {
+  private shouldRecompute(context: IErrorScopeContext) {
     if (!this._isInitialized) return true;
 
     let node = this._list.head;
@@ -238,12 +294,23 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
       const recordedVersion = snapshot.version;
       const next = node.next;
 
-      const hasChanged = snapshot.instance.confirm() !== recordedVersion;
+      let confirmedVersion: number;
+      try {
+        confirmedVersion = snapshot.instance.confirm();
+      } catch (e) {
+        // A failing dependency is recorded, not left to abort this scan - the same "a failure
+        // here must not prevent the rest from proceeding" rule `run()` applies to `disposeAdopted`
+        // and to the action. Its version can no longer be trusted, so this is treated as a
+        // change: the recompute goes ahead and surfaces the error through the normal path,
+        // rather than silently trusting a dependency whose confirmation just failed.
+        context.push(e);
+        return true;
+      }
 
       // Disposal outranks a pending change: once confirming has torn this manager down there
       // is nothing left to recompute, and `next` has been scrubbed to `null`.
       if (this.isDisposed) return false;
-      if (hasChanged) return true;
+      if (confirmedVersion !== recordedVersion) return true;
 
       node = next;
     }

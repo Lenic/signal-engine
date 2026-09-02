@@ -43,7 +43,10 @@ export class VersionLeader extends DirtyMarkable implements IVersionLeader {
     this._isDirty = false;
 
     // Nobody observes the version - it is polled by readers holding a recorded copy - so moving
-    // it needs no notification, and therefore no batch to collect one.
+    // it needs no notification, and therefore no batch to collect one. `_versionConfirmer` is a
+    // memo's own `manager.run()`, which throws (rather than returning as if nothing happened)
+    // when recomputing just failed - so a failure here propagates out of `confirm()` on its own,
+    // the same way it would out of any other function call that threw.
     if (!this.isDisposed && wasDirty && this._versionConfirmer(this)) {
       this._version += 1;
     }
@@ -60,13 +63,10 @@ export class VersionLeader extends DirtyMarkable implements IVersionLeader {
     this._trackedSnapshot = snapshot;
   }
 
-  appendFollower(follower: IVersionFollower): () => void {
-    this.checkDisposed();
+  appendFollower(follower: IVersionFollower): ILinkedNode<IVersionFollower> {
+    this.assertNotDisposed();
 
     const followers = (this._followers ??= new LinkedList<IVersionFollower>());
-    let node: ILinkedNode<IVersionFollower> | null = followers.append(follower);
-
-    node.onRemoved = () => void (node = null);
-    return () => node?.removeSelf();
+    return followers.append(follower);
   }
 }
