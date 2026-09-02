@@ -1,6 +1,5 @@
 import {
   Disposable,
-  ErrorScope,
   IDisposable,
   IErrorScopeContext,
   ILinkedList,
@@ -263,8 +262,11 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
     globalScheduler.connectorManager = undefined;
 
     // Every adopted resource must be released even when one of them throws, so each release is
-    // caught individually and the collected errors are rethrown as one.
-    const context = ErrorScope.begin();
+    // caught individually and the collected errors are rethrown as one. Uses beginBatch/endBatch
+    // rather than ErrorScope directly: called from inside run(), which already has a context open,
+    // this reuses it - flat aggregation, and no separate scope to open - instead of opening its
+    // own nested one. Called standalone from dispose(), it still gets a real scope of its own.
+    const context = globalScheduler.beginBatch();
     try {
       this._adoptedList.clear((release) => {
         try {
@@ -275,7 +277,7 @@ export class ConnectorManager<T = void> extends Disposable implements IConnector
       });
     } finally {
       globalScheduler.connectorManager = previousManager;
-      ErrorScope.end(context);
+      globalScheduler.endBatch(context);
     }
   }
 

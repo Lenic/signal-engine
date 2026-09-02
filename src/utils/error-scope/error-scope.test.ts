@@ -150,33 +150,22 @@ describe('ErrorScope', () => {
     expect(ran).toBe(1);
   });
 
-  test('nested runs keep their errors to themselves', () => {
-    const seen: string[] = [];
+  test('begin() called while a scope is already open throws instead of merging into it', () => {
+    // ErrorScope holds a single reusable context rather than a pool keyed by nesting depth - a
+    // choice that only holds because begin() is never called while a previous scope is still
+    // open (see the comment on ErrorScope). This is that invariant enforced: a caller that
+    // reaches begin() a second time before the first end() - bypassing beginBatch, which is the
+    // only thing meant to call begin() at all - gets a loud failure instead of having its errors
+    // silently folded into whichever scope happened to be open already.
     let outerCaught: unknown;
+    let innerCaught: unknown;
 
     try {
       runScope((outer) => {
-        // An inner scope reports on its own; the outer one only ever sees what escapes it.
         try {
-          try {
-            runScope((inner) => {
-              try {
-                throw new Error('inner-a');
-              } catch (e) {
-                inner.push(e);
-              }
-              try {
-                throw new Error('inner-b');
-              } catch (e) {
-                inner.push(e);
-              }
-            });
-          } catch (e) {
-            seen.push((e as AggregateError).errors.map((x) => (x as Error).message).join('+'));
-            throw new Error('inner rolled up');
-          }
+          ErrorScope.begin();
         } catch (e) {
-          outer.push(e);
+          innerCaught = e;
         }
 
         try {
@@ -189,39 +178,41 @@ describe('ErrorScope', () => {
       outerCaught = e;
     }
 
-    expect(seen).toEqual(['inner-a+inner-b']);
-    expect((outerCaught as AggregateError).errors.map((e) => (e as Error).message)).toEqual([
-      'inner rolled up',
-      'outer-a',
-    ]);
+    expect((innerCaught as Error).message).toBe('[ErrorScope]: begin() called while a scope was already open.');
+    // The failed nested attempt didn't touch isOpen/errors on the shared context - the outer
+    // scope reports normally, as if that attempt had never happened.
+    expect((outerCaught as Error).message).toBe('outer-a');
   });
 
-  test('a scope is never handed to two runs at once', () => {
-    const nest = (depth: number, live: Set<IErrorScopeContext>) => {
+  test('a scope opened and properly closed is not left corrupted for the next one', () => {
+    // Companion to the test above: a rejected nested begin() must not leave the shared context
+    // stuck "open" or carrying stale state into whatever legitimately runs next.
+    expect(() =>
       runScope((context) => {
-        // Reuse is by nesting depth, so an outer run's scope must never be the one an inner run
-        // is given - that is the aliasing a pool has to rule out.
-        expect(live.has(context)).toBe(false);
-        live.add(context);
+        try {
+          ErrorScope.begin();
+        } catch {
+          // ignored - the point here is just that it doesn't corrupt anything
+        }
+        throw new Error('real failure');
+      }),
+    ).toThrow('real failure');
 
-        if (depth > 0) nest(depth - 1, live);
-
-        live.delete(context);
-      });
-    };
-
-    for (let i = 0; i < 50; i++) nest(8, new Set());
+    let ran = 0;
+    expect(() => runScope(() => void ran++)).not.toThrow();
+    expect(ran).toBe(1);
   });
 
-  test('runs at the same depth reuse the same scope', () => {
+  test('sequential runs reuse the same scope', () => {
     const collect = () => {
       let seen: IErrorScopeContext | undefined;
       runScope((context) => void (seen = context));
       return seen;
     };
 
-    // Nothing observable depends on this, but it is the whole point of pooling: without it every
-    // run allocates, and the reuse tests above would pass vacuously.
+    // Nothing observable depends on this, but it is the whole point of holding a single reusable
+    // context: without it, every run would allocate, and the reuse tests above would pass
+    // vacuously.
     expect(collect()).toBe(collect());
 
     // A run that throws still returns its scope, so the next one at that depth picks it up again.

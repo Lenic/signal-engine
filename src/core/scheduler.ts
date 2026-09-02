@@ -14,8 +14,11 @@ export const globalScheduler: IScheduler = {
     if (this.pendingSignalUpdateList.size === 0) return;
 
     // Each write is caught on its own, so one failing comparer cannot strand the writes queued
-    // behind it.
-    const context = ErrorScope.begin();
+    // behind it. Uses beginBatch/endBatch rather than ErrorScope directly: called from inside
+    // endBatch's own flush loop, this reuses the context that loop is already holding open
+    // instead of opening a separate nested one; called standalone from a memo read outside any
+    // batch, it still gets a real scope of its own.
+    const context = this.beginBatch();
     try {
       this.pendingSignalUpdateList.clear((v) => {
         try {
@@ -25,7 +28,7 @@ export const globalScheduler: IScheduler = {
         }
       });
     } finally {
-      ErrorScope.end(context);
+      this.endBatch(context);
     }
   },
   beginBatch(): IErrorScopeContext {
