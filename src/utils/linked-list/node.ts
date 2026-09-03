@@ -1,18 +1,18 @@
-import { ILinkedList, ILinkedListInternalActions, ILinkedNode } from './types';
+import { ILinkedListInternalActions, ILinkedNode } from './types';
 
 export class LinkedNode<T> implements ILinkedNode<T> {
   value: T;
-  prev: ILinkedNode<T> | null;
   next: ILinkedNode<T> | null;
-  list: ILinkedList<T> | null;
+  previous: ILinkedNode<T> | null;
+  list: ILinkedListInternalActions<T>;
   onRemoved: ((node: ILinkedNode<T>) => void) | null;
 
-  constructor(value: T) {
+  constructor(value: T, list: ILinkedListInternalActions<T>) {
+    this.list = list;
     this.value = value;
 
-    this.prev = null;
     this.next = null;
-    this.list = null;
+    this.previous = null;
     this.onRemoved = null;
   }
 
@@ -21,7 +21,7 @@ export class LinkedNode<T> implements ILinkedNode<T> {
       throw new Error('[LinkedNode]: can not find the owning list.');
     }
 
-    return (this.list as unknown as ILinkedListInternalActions<T>).insertNodeBefore(this, value);
+    return this.list.insertNodeBefore(this, value);
   }
 
   insertAfter(value: T): ILinkedNode<T> {
@@ -29,24 +29,24 @@ export class LinkedNode<T> implements ILinkedNode<T> {
       throw new Error('[LinkedNode]: can not find the owning list.');
     }
 
-    return (this.list as unknown as ILinkedListInternalActions<T>).insertNodeAfter(this, value);
+    return this.list.insertNodeAfter(this, value);
   }
 
   removeSelf(): void {
-    if (this.list) {
-      this.list.remove(this);
-
-      this.clear();
-    }
+    this.list.remove(this);
+    this.clear();
   }
 
   clear(): void {
-    this.onRemoved?.(this);
+    try {
+      this.onRemoved?.(this);
+    } finally {
+      this.next = null;
+      this.previous = null;
+      this.onRemoved = null;
 
-    this.value = undefined as unknown as T;
-    this.prev = null;
-    this.next = null;
-    this.list = null;
-    this.onRemoved = null;
+      this.value = undefined as unknown as T;
+      this.list = undefined as unknown as ILinkedListInternalActions<T>;
+    }
   }
 }

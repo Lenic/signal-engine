@@ -62,7 +62,7 @@ describe('LinkedList (With Global Node Pooling)', () => {
     // Nothing about the node survives removal, so a stale reference cannot be mistaken for a
     // live entry.
     expect(removed.value).toBeUndefined();
-    expect(removed.prev).toBeNull();
+    expect(removed.previous).toBeNull();
     expect(removed.next).toBeNull();
     expect(removed.onRemoved).toBeNull();
 
@@ -167,11 +167,11 @@ describe('LinkedList (With Global Node Pooling)', () => {
     expect(list.head).toBe(n1);
     expect(list.tail).toBe(n3);
 
-    expect(n1.prev).toBeNull();
+    expect(n1.previous).toBeNull();
     expect(n1.next).toBe(n2);
-    expect(n2.prev).toBe(n1);
+    expect(n2.previous).toBe(n1);
     expect(n2.next).toBe(n3);
-    expect(n3.prev).toBe(n2);
+    expect(n3.previous).toBe(n2);
     expect(n3.next).toBeNull();
   });
 
@@ -288,7 +288,7 @@ describe('LinkedList (With Global Node Pooling)', () => {
     expect(clearedItems).toEqual([
       { item: 100, index: 0 },
       { item: 200, index: 1 },
-      { item: 300, index: 2 }
+      { item: 300, index: 2 },
     ]);
     expect(list.size).toBe(0);
     expect(list.head).toBeNull();
@@ -296,4 +296,3 @@ describe('LinkedList (With Global Node Pooling)', () => {
     expect(list.toArray()).toEqual([]);
   });
 });
-
