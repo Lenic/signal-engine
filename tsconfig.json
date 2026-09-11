@@ -14,6 +14,7 @@
     "declaration": true,
     "noImplicitAny": false,
     "esModuleInterop": true,
+    "stripInternal": true,
     "types": ["vitest"]
   },
   "include": ["src/**/*"],

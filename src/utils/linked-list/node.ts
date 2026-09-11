@@ -1,13 +1,15 @@
-import { ILinkedListInternalActions, ILinkedNode } from './types';
+import type { LinkedList } from './main';
+import type { ILinkedNode } from './types';
 
 export class LinkedNode<T> implements ILinkedNode<T> {
   value: T;
+  /** @internal */
+  list: LinkedList<T>;
   next: ILinkedNode<T> | null;
   previous: ILinkedNode<T> | null;
-  list: ILinkedListInternalActions<T>;
   onRemoved: ((node: ILinkedNode<T>) => void) | null;
 
-  constructor(value: T, list: ILinkedListInternalActions<T>) {
+  constructor(value: T, list: LinkedList<T>) {
     this.list = list;
     this.value = value;
 
@@ -17,27 +19,51 @@ export class LinkedNode<T> implements ILinkedNode<T> {
   }
 
   insertBefore(value: T): ILinkedNode<T> {
-    if (!this.list) {
-      throw new Error('[LinkedNode]: can not find the owning list.');
+    this.assertNotCleared();
+
+    const newNode = new LinkedNode(value, this.list);
+    const originalPreviousNode = this.previous;
+
+    newNode.next = this;
+    newNode.previous = originalPreviousNode;
+
+    this.previous = newNode;
+    if (originalPreviousNode) {
+      originalPreviousNode.next = newNode;
     }
 
-    return this.list.insertNodeBefore(this, value);
+    this.list.onNodeInserted(newNode);
+    return newNode;
   }
 
   insertAfter(value: T): ILinkedNode<T> {
-    if (!this.list) {
-      throw new Error('[LinkedNode]: can not find the owning list.');
+    this.assertNotCleared();
+
+    const newNode = new LinkedNode(value, this.list);
+    const originalNextNode = this.next;
+
+    newNode.previous = this;
+    newNode.next = originalNextNode;
+
+    this.next = newNode;
+    if (originalNextNode) {
+      originalNextNode.previous = newNode;
     }
 
-    return this.list.insertNodeAfter(this, value);
+    this.list.onNodeInserted(newNode);
+    return newNode;
   }
 
   removeSelf(): void {
+    this.assertNotCleared();
+
     this.list.remove(this);
-    this.clear();
   }
 
+  /** @internal */
   clear(): void {
+    this.assertNotCleared();
+
     try {
       this.onRemoved?.(this);
     } finally {
@@ -46,7 +72,13 @@ export class LinkedNode<T> implements ILinkedNode<T> {
       this.onRemoved = null;
 
       this.value = undefined as unknown as T;
-      this.list = undefined as unknown as ILinkedListInternalActions<T>;
+      this.list = undefined as unknown as LinkedList<T>;
+    }
+  }
+
+  private assertNotCleared() {
+    if (!this.list) {
+      throw new Error('[LinkedNode]: can not find the owning list.');
     }
   }
 }
