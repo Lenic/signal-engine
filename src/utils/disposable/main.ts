@@ -26,6 +26,10 @@ export class Disposable implements IDisposable {
     }
   }
 
+  [Symbol.dispose](): void {
+    this.dispose();
+  }
+
   disposeWithMe(disposable: IDisposable | (() => void)): void {
     this.assertNotDisposed();
 
