@@ -50,10 +50,12 @@ class ErrorScopeContext implements IErrorScopeContext {
   private close(): void {
     for (let i = currentDepth; i > this.iterationDepth; i--) {
       pool[i].isOpen = false;
+      pool[i].startCount = 0;
     }
 
     currentDepth = Math.min(currentDepth, this.iterationDepth - 1);
     this.isOpen = false;
+    this.startCount = 0;
   }
 
   private throwIfNewlyFailed(): void {
@@ -106,19 +108,20 @@ class ErrorScopeContext implements IErrorScopeContext {
   }
 
   static end(context: IErrorScopeContext): void {
-    const internalContext = context instanceof ErrorScopeContext ? context : null;
-
-    if (!internalContext) return;
-    if (!internalContext.isOpen) return;
+    const target =
+      context instanceof ErrorScopeContext && context.isOpen ? context : currentDepth >= 0 ? pool[currentDepth] : null;
+    if (!target) {
+      throw new Error('[ErrorScope]: end(context) called while no scope was open.');
+    }
 
     if (pool[currentDepth] !== context) {
       errors.push(new Error('[ErrorScope]: end(context) called in the wrong sequence.'));
     }
 
     try {
-      internalContext.throwIfNewlyFailed();
+      target.throwIfNewlyFailed();
     } finally {
-      internalContext.close();
+      target.close();
     }
   }
 }
