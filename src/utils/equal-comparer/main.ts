@@ -31,7 +31,14 @@ export class EqualComparer<T> extends Disposable implements IEqualComparer<T> {
     return this._value;
   }
 
-  setValue(candidate: T): boolean {
+  setValue(candidate: T, force: boolean = false): boolean {
+    this.assertNotDisposed();
+
+    if (force) {
+      this._value = candidate;
+      return true;
+    }
+
     if (this._value !== DEFAULT_VALUE) {
       if (this._value === candidate) return false;
       if (this._comparer(this._value, candidate)) return false;
@@ -41,7 +48,13 @@ export class EqualComparer<T> extends Disposable implements IEqualComparer<T> {
     return true;
   }
 
-  setValueDirectly(candidate: T): void {
-    this._value = candidate;
+  dispose() {
+    if (this.isDisposed) return;
+
+    super.dispose();
+
+    this._name = undefined;
+    this._value = undefined as unknown as T;
+    this._comparer = undefined as unknown as (x: T, y: T) => boolean;
   }
 }
