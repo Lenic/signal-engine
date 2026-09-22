@@ -1,5 +1,6 @@
+import type { IEqualComparer } from './types';
+
 import { Disposable } from '../disposable';
-import { IEqualComparer } from './types';
 
 export function defaultEqualComparer<T>(x: T, y: T): boolean {
   return x === y;

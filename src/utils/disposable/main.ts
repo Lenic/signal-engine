@@ -1,4 +1,5 @@
-import { IDisposable } from './types';
+import type { IDisposable } from './types';
+
 import { isDisposable } from './utils';
 
 export class Disposable implements IDisposable {

@@ -1,5 +1,6 @@
-import { LinkedNode } from './node';
 import type { ILinkedList, ILinkedNode } from './types';
+
+import { LinkedNode } from './node';
 
 export class LinkedList<T> implements ILinkedList<T> {
   private _size: number;

@@ -1,4 +1,4 @@
-import { IErrorScopeContext } from './types';
+import type { IErrorScopeContext } from './types';
 
 let currentDepth = -1;
 let errors: any[] = [];

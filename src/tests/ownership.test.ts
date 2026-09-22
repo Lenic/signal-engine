@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { globalScheduler } from '../core';
 import { effect } from '../effect';
 import { memo } from '../memo';

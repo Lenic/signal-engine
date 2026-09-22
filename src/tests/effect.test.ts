@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'vitest';
+
 import { globalScheduler } from '../core';
-import { signal } from '../signal';
 import { effect } from '../effect';
 import { memo } from '../memo';
+import { signal } from '../signal';
 
 describe('effect', () => {
   test('basic reactivity', () => {

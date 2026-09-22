@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { Schedulable } from '../core/schedulable';
 
 describe('Schedulable', () => {

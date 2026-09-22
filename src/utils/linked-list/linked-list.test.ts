@@ -1,6 +1,8 @@
-import { describe, expect, test } from 'vitest';
-import { LinkedList } from './main';
 import type { ILinkedNode } from './types';
+
+import { describe, expect, test } from 'vitest';
+
+import { LinkedList } from './main';
 
 function forwards<T>(list: LinkedList<T>): T[] {
   const values: T[] = [];

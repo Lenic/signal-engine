@@ -1,4 +1,4 @@
-import { IObjectOptions } from './core';
+import type { IObjectOptions } from './core';
 
 export interface ISignalOptions<T> extends IObjectOptions {
   name?: string;

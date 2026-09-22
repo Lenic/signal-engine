@@ -1,13 +1,8 @@
-import {
-  ConnectorManager,
-  globalScheduler,
-  IConnectorManager,
-  IObjectOptions,
-  Schedulable,
-  VersionFollower,
-} from './core';
-import { IEffectAction, IEffectCleanup } from './types';
-import { ILinkedNode } from './utils';
+import type { IConnectorManager, IObjectOptions } from './core';
+import type { IEffectAction, IEffectCleanup } from './types';
+import type { ILinkedNode } from './utils';
+
+import { ConnectorManager, globalScheduler, Schedulable, VersionFollower } from './core';
 
 export function effect(action: IEffectAction, options?: IObjectOptions): IEffectCleanup {
   const { name } = options ?? {};

@@ -1,4 +1,4 @@
-import { IDisposable } from '../disposable';
+import type { IDisposable } from '../disposable';
 
 export interface IEqualComparer<T> extends IDisposable {
   readonly value: T;

@@ -1,6 +1,8 @@
-import { describe, expect, test } from 'vitest';
-import { ErrorScope, ScopeAbortSignal } from './main';
 import type { IErrorScopeContext } from './types';
+
+import { describe, expect, test } from 'vitest';
+
+import { ErrorScope, ScopeAbortSignal } from './main';
 
 /**
  * Every test below opens its scopes the way a production caller does - `begin()` outside the

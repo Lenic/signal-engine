@@ -26,6 +26,8 @@
   ],
   "scripts": {
     "build": "tsdown",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "dev": "tsdown --watch",
     "test": "vitest run",
     "test:w": "vitest",
@@ -33,12 +35,20 @@
     "bench": "pnpm build && node --expose-gc src/bench/index.mjs"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@preact/signals-core": "^1.14.4",
     "@vue/reactivity": "^3.5.41",
     "alien-signals": "^3.2.1",
+    "eslint": "^10.11.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import-x": "^4.17.1",
+    "eslint-plugin-perfectionist": "^5.11.1",
+    "globals": "^17.12.0",
     "reactive-framework-test-suite": "^0.0.2",
     "tsdown": "^0.21.7",
     "typescript": "^6.0.2",
+    "typescript-eslint": "^8.70.1",
     "vitest": "^4.1.5"
-  }
+  },
+  "packageManager": "pnpm@12.5.1+sha512.e3f305bc784a2bc89f5ad3b6138889470fae8d2af5f36b61216ec91c2c3d64089775f9de38aac331044ea40f245cb0d5666392dfdf65824e1907ef6a2c62de5f"
 }

@@ -1,9 +1,11 @@
+import type { IMemoValue } from '../types';
+
 import { describe, expect, test } from 'vitest';
+
 import { globalScheduler } from '../core';
-import { signal } from '../signal';
 import { effect } from '../effect';
 import { memo } from '../memo';
-import type { IMemoValue } from '../types';
+import { signal } from '../signal';
 
 /** Reaches past the public surface to assert on the dependency graph a memo actually built. */
 const connectorCount = (m: IMemoValue<unknown>) =>

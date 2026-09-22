@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { DirtyMarkable } from '../core/dirty-markable';
 import { VersionFollower } from '../core/version-follower';
 

@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { signal } from '../signal';
+
+import { globalScheduler } from '../core';
 import { effect } from '../effect';
 import { memo } from '../memo';
-import { globalScheduler } from '../core';
+import { signal } from '../signal';
 
 describe('batch', () => {
   test('basic batch updates', () => {

@@ -1,9 +1,12 @@
+import type { ReactiveFramework } from 'reactive-framework-test-suite';
+
+import { testSuite, SkipTest, setExpect } from 'reactive-framework-test-suite';
 import { describe, expect, test } from 'vitest';
-import { testSuite, SkipTest, setExpect, type ReactiveFramework } from 'reactive-framework-test-suite';
-import { signal } from '../signal';
+
+import { globalScheduler } from '../core';
 import { effect } from '../effect';
 import { memo } from '../memo';
-import { globalScheduler } from '../core';
+import { signal } from '../signal';
 
 const framework: ReactiveFramework = {
   signal(initialValue) {

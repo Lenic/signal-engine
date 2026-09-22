@@ -1,5 +1,7 @@
-import { globalScheduler, IPendingSignalUpdate, Schedulable, VersionLeader } from './core';
-import { ISignalOptions, ISignalValue } from './types';
+import type { IPendingSignalUpdate } from './core';
+import type { ISignalOptions, ISignalValue } from './types';
+
+import { globalScheduler, Schedulable, VersionLeader } from './core';
 import { defaultEqualComparer, EqualComparer } from './utils';
 
 interface IPendingSignalValueUpdate<T> extends IPendingSignalUpdate {
