@@ -33,6 +33,10 @@ class ErrorScopeContext implements IErrorScopeContext {
     this.assertOpen();
     this.assertActive('push()');
 
+    while ((error as { error?: unknown } | null)?.error === ScopeAbortSignal.instance) {
+      error = (error as { suppressed: unknown }).suppressed;
+    }
+
     if (error === ScopeAbortSignal.instance) return;
 
     errors.push(error);
