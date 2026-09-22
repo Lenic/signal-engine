@@ -1,7 +1,7 @@
 import type { IErrorScopeContext } from './types';
 
 let currentDepth = -1;
-let errors: any[] = [];
+let errors: unknown[] = [];
 const MAX_ITERATION_DEPTH = 100;
 const pool: ErrorScopeContext[] = [];
 
@@ -29,7 +29,7 @@ class ErrorScopeContext implements IErrorScopeContext {
     return errors.length > this.startCount;
   }
 
-  push(error: any): void {
+  push(error: unknown): void {
     this.assertOpen();
     this.assertActive('push()');
 
@@ -123,6 +123,10 @@ class ErrorScopeContext implements IErrorScopeContext {
     } finally {
       target.close();
     }
+  }
+
+  [Symbol.dispose](): void {
+    ErrorScopeContext.end(this);
   }
 }
 
