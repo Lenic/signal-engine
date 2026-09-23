@@ -41,7 +41,8 @@ export class SignalValue<T, TListener extends IDirtyMarkable> implements ISignal
     let node = this._listeners?.head;
     if (!node) return;
 
-    using ctx = ErrorScope.begin();
+    const ctx = ErrorScope.begin();
+
     while (node) {
       try {
         node.value.markDirty();
@@ -50,6 +51,7 @@ export class SignalValue<T, TListener extends IDirtyMarkable> implements ISignal
       }
       node = node.next;
     }
+    ErrorScope.end(ctx);
   }
 
   setValue(newValue: T, force?: boolean): void {
