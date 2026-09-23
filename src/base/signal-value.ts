@@ -74,15 +74,10 @@ export class SignalValue<T, TListener extends IDirtyMarkable> implements ISignal
   }
 
   addChangeListener(listener: TListener): ILinkedNode<TListener> {
-    return this.bus.append(listener);
-  }
-
-  private get bus(): ILinkedList<TListener> {
-    let bus = this._listeners;
-    if (!bus) {
-      this._listeners = bus = new LinkedList<TListener>();
+    if (!this._listeners) {
+      this._listeners = new LinkedList<TListener>();
     }
-    return bus;
+    return this._listeners.append(listener);
   }
 
   private equal(target: T): boolean {
