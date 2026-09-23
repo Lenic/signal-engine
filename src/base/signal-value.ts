@@ -13,11 +13,12 @@ export class SignalValue<T, TListener extends IDirtyMarkable> implements ISignal
   private _listeners?: ILinkedList<TListener> | undefined;
 
   constructor(value: T, options?: ISignalValueOptions<T>) {
-    this._hasBeenRead = false;
-
     this._version = 0;
     this._value = value;
+    this._hasBeenRead = false;
+
     this._name = options?.name;
+    this._comparer = options?.comparer;
   }
 
   get name(): string | undefined {
