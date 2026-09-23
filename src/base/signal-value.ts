@@ -4,6 +4,8 @@ import type { IAction, IDirtyMarkable, ISignalValue, ISignalValueOptions } from 
 
 import { ErrorScope, LinkedList } from '../utils';
 
+import { globalContext } from './global-context';
+
 export class SignalValue<T, TListener extends IDirtyMarkable> implements ISignalValue<T, TListener> {
   private _value: T;
   private _name?: string;
@@ -27,6 +29,8 @@ export class SignalValue<T, TListener extends IDirtyMarkable> implements ISignal
 
   get value(): T {
     this._hasBeenRead = true;
+    globalContext.track(this);
+
     return this._value;
   }
 

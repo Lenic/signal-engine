@@ -8,14 +8,18 @@ export interface IAction<TArgs extends unknown[] = [], TResult = void> {
   (...args: TArgs): TResult;
 }
 
+export interface IVersioned {
+  readonly version: number;
+}
+
 export interface IDirtyMarkable {
   markDirty(): void;
 }
 
-export interface IChangeListenerSource<Listener> {
-  readonly listeners?: ILinkedList<Listener>;
+export interface IChangeListenerSource<TListener> {
+  readonly listeners?: ILinkedList<TListener>;
 
-  addChangeListener(listener: Listener): ILinkedNode<Listener>;
+  addChangeListener(listener: TListener): ILinkedNode<TListener>;
 }
 
 export interface ISignalValueOptions<T> extends INamedObject {
@@ -23,7 +27,7 @@ export interface ISignalValueOptions<T> extends INamedObject {
 }
 
 export interface ISignalValue<T, TListener extends IDirtyMarkable>
-  extends INamedObject, IChangeListenerSource<TListener> {
+  extends IVersioned, INamedObject, IChangeListenerSource<TListener> {
   readonly value: T;
   readonly version: number;
 
@@ -31,9 +35,20 @@ export interface ISignalValue<T, TListener extends IDirtyMarkable>
   setValue(newValue: T, force?: boolean): void;
 }
 
-export interface IEffectAction extends INamedObject, IDisposable {
-  readonly action: IAction;
+export interface ISnapshot {
+  version: number;
+  instance: IVersioned;
+}
 
-  adopt(effectAction: IEffectAction): void;
-  connect<Listener>(source: IChangeListenerSource<Listener>): void;
+/** @internal */
+export interface IConnectManager {
+  connectors: ILinkedList<ISnapshot>;
+  currentConnect?: ILinkedNode<ISnapshot> | null;
+}
+
+export interface IEffectAction extends INamedObject, IDisposable, IDirtyMarkable {
+  /** @internal */
+  queueNode?: ILinkedNode<IEffectAction>;
+
+  run(): void;
 }
