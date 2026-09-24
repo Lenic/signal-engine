@@ -10,6 +10,7 @@ export class EffectAction extends Disposable implements IEffectAction, IConnectM
   private _name?: string;
   private _action: IAction;
   private _isSelfRunning: boolean;
+  private _isInitialized: boolean;
 
   connectors: ILinkedList<ISnapshot>;
   queueNode?: ILinkedNode<IEffectAction>;
@@ -21,8 +22,11 @@ export class EffectAction extends Disposable implements IEffectAction, IConnectM
     this._action = action;
     this._name = options?.name;
 
+    this._isInitialized = false;
     this._isSelfRunning = false;
     this.connectors = new LinkedList<ISnapshot>();
+
+    this.run();
   }
 
   get name(): string | undefined {
@@ -84,6 +88,11 @@ export class EffectAction extends Disposable implements IEffectAction, IConnectM
   }
 
   private hasDependenciesChanged(): boolean {
+    if (!this._isInitialized) {
+      this._isInitialized = true;
+      return true;
+    }
+
     let node = this.connectors.head;
     const ctx = ErrorScope.begin();
     try {

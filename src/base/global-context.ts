@@ -1,6 +1,6 @@
 import type { ILinkedList } from '../utils';
 
-import type { IConnectManager, IEffectAction, IVersioned } from './types';
+import type { IChangeListenerSource, IConnectManager, IDirtyMarkable, IEffectAction, IVersioned } from './types';
 
 import { ErrorScope, LinkedList } from '../utils';
 
@@ -10,8 +10,8 @@ export const globalContext = {
   isRunning: false,
   isConsuming: false,
   effectList: new LinkedList<IEffectAction>() as ILinkedList<IEffectAction>,
-  connectManager: undefined as IConnectManager | undefined,
-  track(source: IVersioned): void {
+  connectManager: undefined as (IConnectManager & IDirtyMarkable) | undefined,
+  track(source: IVersioned & IChangeListenerSource<IDirtyMarkable>): void {
     if (!this.connectManager) return;
 
     const ctx = ErrorScope.begin();
@@ -19,19 +19,22 @@ export const globalContext = {
       const manager = this.connectManager;
       const sourceVersion = source.version;
       if (!manager.currentConnect) {
-        const node = manager.connectors.append({
+        const connector = manager.connectors.append({
           instance: source,
           version: sourceVersion,
+          node: source.addChangeListener(manager),
         });
-        this.connectManager.currentConnect = node.next;
+        this.connectManager.currentConnect = connector.next;
       } else {
         const { value } = manager.currentConnect;
         if (source === value.instance) {
           value.version = sourceVersion;
         } else {
+          manager.currentConnect.value.node.removeSelf();
           manager.currentConnect.value = {
             instance: source,
             version: sourceVersion,
+            node: source.addChangeListener(manager),
           };
         }
         manager.currentConnect = manager.currentConnect.next;

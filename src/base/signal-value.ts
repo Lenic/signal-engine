@@ -6,13 +6,13 @@ import { ErrorScope, LinkedList } from '../utils';
 
 import { globalContext } from './global-context';
 
-export class SignalValue<T, TListener extends IDirtyMarkable> implements ISignalValue<T, TListener> {
+export class SignalValue<T> implements ISignalValue<T> {
   private _value: T;
   private _name?: string;
   private _version: number;
   private _hasBeenRead: boolean;
   private _comparer?: IAction<[T, T], boolean>;
-  private _listeners?: ILinkedList<TListener> | undefined;
+  private _listeners?: ILinkedList<IDirtyMarkable> | undefined;
 
   constructor(value: T, options?: ISignalValueOptions<T>) {
     this._version = 0;
@@ -38,7 +38,7 @@ export class SignalValue<T, TListener extends IDirtyMarkable> implements ISignal
     return this._version;
   }
 
-  get listeners(): ILinkedList<TListener> | undefined {
+  get listeners(): ILinkedList<IDirtyMarkable> | undefined {
     return this._listeners;
   }
 
@@ -78,9 +78,9 @@ export class SignalValue<T, TListener extends IDirtyMarkable> implements ISignal
     }
   }
 
-  addChangeListener(listener: TListener): ILinkedNode<TListener> {
+  addChangeListener(listener: IDirtyMarkable): ILinkedNode<IDirtyMarkable> {
     if (!this._listeners) {
-      this._listeners = new LinkedList<TListener>();
+      this._listeners = new LinkedList<IDirtyMarkable>();
     }
     return this._listeners.append(listener);
   }

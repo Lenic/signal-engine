@@ -26,8 +26,7 @@ export interface ISignalValueOptions<T> extends INamedObject {
   comparer?: IAction<[T, T], boolean>;
 }
 
-export interface ISignalValue<T, TListener extends IDirtyMarkable>
-  extends IVersioned, INamedObject, IChangeListenerSource<TListener> {
+export interface ISignalValue<T> extends IVersioned, INamedObject, IChangeListenerSource<IDirtyMarkable> {
   readonly value: T;
   readonly version: number;
 
@@ -38,6 +37,7 @@ export interface ISignalValue<T, TListener extends IDirtyMarkable>
 export interface ISnapshot {
   version: number;
   instance: IVersioned;
+  node: ILinkedNode<IDirtyMarkable>;
 }
 
 /** @internal */
