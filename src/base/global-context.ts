@@ -10,34 +10,34 @@ export const globalContext = {
   isRunning: false,
   isConsuming: false,
   effectList: new LinkedList<IEffectAction>() as ILinkedList<IEffectAction>,
-  connectManager: undefined as (IConnectManager & IDirtyMarkable) | undefined,
+  activeEffect: undefined as (IEffectAction & IConnectManager) | undefined,
   track(source: IVersioned & IChangeListenerSource<IDirtyMarkable>): void {
-    if (!this.connectManager) return;
+    if (!this.activeEffect) return;
 
     const ctx = ErrorScope.begin();
     try {
-      const manager = this.connectManager;
+      const effect = this.activeEffect;
       const sourceVersion = source.version;
-      if (!manager.currentConnect) {
-        const connector = manager.connectors.append({
+      if (!effect.currentConnect) {
+        const connector = effect.connectors.append({
           instance: source,
           version: sourceVersion,
-          node: source.addChangeListener(manager),
+          node: source.addChangeListener(effect),
         });
-        this.connectManager.currentConnect = connector.next;
+        this.activeEffect.currentConnect = connector.next;
       } else {
-        const { value } = manager.currentConnect;
+        const { value } = effect.currentConnect;
         if (source === value.instance) {
           value.version = sourceVersion;
         } else {
-          manager.currentConnect.value.node.removeSelf();
-          manager.currentConnect.value = {
+          effect.currentConnect.value.node.removeSelf();
+          effect.currentConnect.value = {
             instance: source,
             version: sourceVersion,
-            node: source.addChangeListener(manager),
+            node: source.addChangeListener(effect),
           };
         }
-        manager.currentConnect = manager.currentConnect.next;
+        effect.currentConnect = effect.currentConnect.next;
       }
     } catch (e) {
       ctx.push(e);

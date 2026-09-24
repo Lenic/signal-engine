@@ -51,4 +51,5 @@ export interface IEffectAction extends INamedObject, IDisposable, IDirtyMarkable
   queueNode?: ILinkedNode<IEffectAction>;
 
   run(): void;
+  adopt(disposable: IDisposable): ILinkedNode<IDisposable>;
 }

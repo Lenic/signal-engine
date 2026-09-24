@@ -1,4 +1,4 @@
-import type { ILinkedList, ILinkedNode } from '../utils';
+import type { IDisposable, ILinkedList, ILinkedNode } from '../utils';
 
 import type { IAction, IConnectManager, IEffectAction, INamedObject, ISnapshot } from './types';
 
@@ -11,6 +11,7 @@ export class EffectAction extends Disposable implements IEffectAction, IConnectM
   private _action: IAction;
   private _isSelfRunning: boolean;
   private _isInitialized: boolean;
+  private _children?: ILinkedList<IDisposable>;
 
   connectors: ILinkedList<ISnapshot>;
   queueNode?: ILinkedNode<IEffectAction>;
@@ -46,10 +47,10 @@ export class EffectAction extends Disposable implements IEffectAction, IConnectM
 
   run() {
     const previousIsRunning = globalContext.isRunning;
-    const previousActiveEffect = globalContext.connectManager;
+    const previousActiveEffect = globalContext.activeEffect;
 
     globalContext.isRunning = true;
-    globalContext.connectManager = this;
+    globalContext.activeEffect = this;
     try {
       if (this._isSelfRunning) return;
       this._isSelfRunning = true;
@@ -58,6 +59,9 @@ export class EffectAction extends Disposable implements IEffectAction, IConnectM
 
         const ctx = ErrorScope.begin();
         try {
+          this.releaseChildren();
+          previousActiveEffect?.adopt(this);
+
           this.currentConnect = this.connectors.head;
           this._action();
           this.clearConnnectsTail();
@@ -71,10 +75,17 @@ export class EffectAction extends Disposable implements IEffectAction, IConnectM
       }
     } finally {
       globalContext.isRunning = previousIsRunning;
-      globalContext.connectManager = previousActiveEffect;
+      globalContext.activeEffect = previousActiveEffect;
 
       globalContext.consumeTail();
     }
+  }
+
+  adopt(disposable: IDisposable): ILinkedNode<IDisposable> {
+    if (!this._children) {
+      this._children = new LinkedList<IDisposable>();
+    }
+    return this._children.append(disposable);
   }
 
   dispose(): void {
@@ -89,6 +100,8 @@ export class EffectAction extends Disposable implements IEffectAction, IConnectM
 
     this.queueNode?.removeSelf();
 
+    this.releaseChildren();
+
     this.currentConnect = null;
     let node = this.connectors.head;
     while (node) {
@@ -97,6 +110,15 @@ export class EffectAction extends Disposable implements IEffectAction, IConnectM
       node = this.connectors.head;
     }
     this.connectors = undefined as unknown as ILinkedList<ISnapshot>;
+  }
+
+  private releaseChildren() {
+    let node = this._children?.head;
+    while (node) {
+      node.value?.dispose();
+      node.removeSelf();
+      node = this._children?.head;
+    }
   }
 
   private clearConnnectsTail() {
@@ -134,6 +156,6 @@ export class EffectAction extends Disposable implements IEffectAction, IConnectM
   }
 
   private static releaseQueueNode(node: ILinkedNode<IEffectAction>): void {
-    node.value.queueNode = void 0;
+    node.value.queueNode = undefined;
   }
 }
