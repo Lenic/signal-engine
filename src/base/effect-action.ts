@@ -44,7 +44,6 @@ export class EffectAction extends Disposable implements IEffectAction, IConnectM
     }
   }
 
-  /** @internal */
   run() {
     const previousIsRunning = globalContext.isRunning;
     const previousActiveEffect = globalContext.connectManager;
@@ -76,6 +75,29 @@ export class EffectAction extends Disposable implements IEffectAction, IConnectM
 
       globalContext.consumeTail();
     }
+  }
+
+  dispose(): void {
+    if (this.isDisposed) return;
+
+    super.dispose();
+
+    this._name = undefined;
+    this._isInitialized = false;
+    this._isSelfRunning = false;
+    this._action = undefined as unknown as IAction;
+
+    this.queueNode?.removeSelf();
+    this.queueNode = undefined;
+
+    this.currentConnect = null;
+    let node = this.connectors.head;
+    while (node) {
+      node.value.node.removeSelf();
+      node.removeSelf();
+      node = this.connectors.head;
+    }
+    this.connectors = undefined as unknown as ILinkedList<ISnapshot>;
   }
 
   private clearConnnectsTail() {
