@@ -54,7 +54,7 @@ export function effect(action: IEffectAction, options?: IObjectOptions): IEffect
       // not `run()` ends up finding anything to recompute. Clearing the flag here rather than
       // from inside the action keeps it honest when the action is skipped - otherwise the task
       // stays marked forever and every later `markScheduled()` is silently a no-op.
-      node.onRemoved = () => {
+      node.onBeforeClear = () => {
         node = null;
         task.clearScheduled();
       };

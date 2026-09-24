@@ -226,7 +226,7 @@ describe('LinkedList', () => {
       expect(removed.value).toBeUndefined();
       expect(removed.previous).toBeNull();
       expect(removed.next).toBeNull();
-      expect(removed.onRemoved).toBeNull();
+      expect(removed.onBeforeClear).toBeNull();
     });
 
     test('a removed node is never handed back out', () => {
@@ -316,9 +316,9 @@ describe('LinkedList', () => {
 
       let calls = 0;
       let seen: number | undefined;
-      node.onRemoved = (removed) => {
+      node.onBeforeClear = (target) => {
         calls += 1;
-        seen = removed.value;
+        seen = target.value;
       };
 
       node.removeSelf();
@@ -326,7 +326,7 @@ describe('LinkedList', () => {
       // The callback still sees the value; the scrub happens after it has run.
       expect(calls).toBe(1);
       expect(seen).toBe(10);
-      expect(node.onRemoved).toBeNull();
+      expect(node.onBeforeClear).toBeNull();
       expect(node.value).toBeUndefined();
     });
 
@@ -336,16 +336,16 @@ describe('LinkedList', () => {
 
       let calls = 0;
       let seen: number | undefined;
-      node.onRemoved = (removed) => {
+      node.onBeforeClear = (target) => {
         calls += 1;
-        seen = removed.value;
+        seen = target.value;
       };
 
       list.remove(node);
 
       expect(calls).toBe(1);
       expect(seen).toBe(20);
-      expect(node.onRemoved).toBeNull();
+      expect(node.onBeforeClear).toBeNull();
       expect(node.value).toBeUndefined();
     });
 
@@ -354,7 +354,7 @@ describe('LinkedList', () => {
       const node = list.append(1);
       const survivor = list.append(2);
 
-      node.onRemoved = () => {
+      node.onBeforeClear = () => {
         throw new Error('boom');
       };
 
@@ -365,7 +365,7 @@ describe('LinkedList', () => {
       expect(list.head).toBe(survivor);
       expectList(list, [2]);
       expect(node.value).toBeUndefined();
-      expect(node.onRemoved).toBeNull();
+      expect(node.onBeforeClear).toBeNull();
     });
   });
 

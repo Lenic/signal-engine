@@ -2,7 +2,7 @@ export interface ILinkedNode<T> {
   value: T;
   next: ILinkedNode<T> | null;
   previous: ILinkedNode<T> | null;
-  onRemoved: ((node: ILinkedNode<T>) => void) | null;
+  onBeforeClear: ((node: ILinkedNode<T>) => void) | null;
 
   removeSelf(): void;
   insertAfter(value: T): ILinkedNode<T>;

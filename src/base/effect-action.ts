@@ -40,7 +40,7 @@ export class EffectAction extends Disposable implements IEffectAction, IConnectM
       if (this.queueNode) return;
 
       this.queueNode = globalContext.effectList.append(this);
-      this.queueNode.onRemoved = EffectAction.onBeforeQueueNodeRemove;
+      this.queueNode.onBeforeClear = EffectAction.releaseQueueNode;
     }
   }
 
@@ -88,7 +88,6 @@ export class EffectAction extends Disposable implements IEffectAction, IConnectM
     this._action = undefined as unknown as IAction;
 
     this.queueNode?.removeSelf();
-    this.queueNode = undefined;
 
     this.currentConnect = null;
     let node = this.connectors.head;
@@ -134,7 +133,7 @@ export class EffectAction extends Disposable implements IEffectAction, IConnectM
     return false;
   }
 
-  private static onBeforeQueueNodeRemove(node: ILinkedNode<IEffectAction>): void {
+  private static releaseQueueNode(node: ILinkedNode<IEffectAction>): void {
     node.value.queueNode = void 0;
   }
 }

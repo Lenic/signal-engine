@@ -7,7 +7,7 @@ export class LinkedNode<T> implements ILinkedNode<T> {
   list: LinkedList<T>;
   next: ILinkedNode<T> | null;
   previous: ILinkedNode<T> | null;
-  onRemoved: ((node: ILinkedNode<T>) => void) | null;
+  onBeforeClear: ((node: ILinkedNode<T>) => void) | null;
 
   constructor(value: T, list: LinkedList<T>) {
     this.list = list;
@@ -15,7 +15,7 @@ export class LinkedNode<T> implements ILinkedNode<T> {
 
     this.next = null;
     this.previous = null;
-    this.onRemoved = null;
+    this.onBeforeClear = null;
   }
 
   insertBefore(value: T): ILinkedNode<T> {
@@ -65,11 +65,11 @@ export class LinkedNode<T> implements ILinkedNode<T> {
     this.assertNotCleared();
 
     try {
-      this.onRemoved?.(this);
+      this.onBeforeClear?.(this);
     } finally {
       this.next = null;
       this.previous = null;
-      this.onRemoved = null;
+      this.onBeforeClear = null;
 
       this.value = undefined as unknown as T;
       this.list = undefined as unknown as LinkedList<T>;
