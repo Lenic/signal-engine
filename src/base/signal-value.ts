@@ -1,9 +1,8 @@
 import type { ILinkedList, ILinkedNode } from '../utils';
 
-import type { IAction, IDirtyMarkable, ISignalValue, ISignalValueOptions } from './types';
+import type { IAction, IDirtyMarkable, ISignalValue, IValueOptions } from './types';
 
-import { ErrorScope, LinkedList } from '../utils';
-
+import { addChangeListener, notifyListeners } from './change-listener';
 import { globalContext } from './global-context';
 
 export class SignalValue<T> implements ISignalValue<T> {
@@ -12,9 +11,11 @@ export class SignalValue<T> implements ISignalValue<T> {
   private _version: number;
   private _hasBeenRead: boolean;
   private _comparer?: IAction<[T, T], boolean>;
-  private _listeners?: ILinkedList<IDirtyMarkable> | undefined;
 
-  constructor(value: T, options?: ISignalValueOptions<T>) {
+  /** @internal */
+  _listeners?: ILinkedList<IDirtyMarkable> | undefined;
+
+  constructor(value: T, options?: IValueOptions<T>) {
     this._version = 0;
     this._value = value;
     this._hasBeenRead = false;
@@ -43,20 +44,11 @@ export class SignalValue<T> implements ISignalValue<T> {
   }
 
   flush(): void {
-    let node = this._listeners?.head;
-    if (!node) return;
+    notifyListeners(this);
+  }
 
-    const ctx = ErrorScope.begin();
-
-    while (node) {
-      try {
-        node.value.markDirty();
-      } catch (e) {
-        ctx.push(e);
-      }
-      node = node.next;
-    }
-    ErrorScope.end(ctx);
+  addChangeListener(listener: IDirtyMarkable): ILinkedNode<IDirtyMarkable> {
+    return addChangeListener(this, listener);
   }
 
   setValue(newValue: T, force?: boolean): void {
@@ -76,13 +68,6 @@ export class SignalValue<T> implements ISignalValue<T> {
         this.flush();
       }
     }
-  }
-
-  addChangeListener(listener: IDirtyMarkable): ILinkedNode<IDirtyMarkable> {
-    if (!this._listeners) {
-      this._listeners = new LinkedList<IDirtyMarkable>();
-    }
-    return this._listeners.append(listener);
   }
 
   private equal(target: T): boolean {

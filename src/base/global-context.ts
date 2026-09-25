@@ -10,7 +10,7 @@ export const globalContext = {
   isRunning: false,
   isConsuming: false,
   effectList: new LinkedList<IEffectAction>() as ILinkedList<IEffectAction>,
-  activeEffect: undefined as (IEffectAction & IConnectManager) | undefined,
+  activeEffect: undefined as (IDirtyMarkable & IConnectManager) | undefined,
   track(source: IVersioned & IChangeListenerSource<IDirtyMarkable>): void {
     if (!this.activeEffect) return;
 

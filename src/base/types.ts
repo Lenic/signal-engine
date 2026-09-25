@@ -22,7 +22,7 @@ export interface IChangeListenerSource<TListener> {
   addChangeListener(listener: TListener): ILinkedNode<TListener>;
 }
 
-export interface ISignalValueOptions<T> extends INamedObject {
+export interface IValueOptions<T> extends INamedObject {
   comparer?: IAction<[T, T], boolean>;
 }
 
@@ -44,6 +44,8 @@ export interface ISnapshot {
 export interface IConnectManager {
   connectors: ILinkedList<ISnapshot>;
   currentConnect?: ILinkedNode<ISnapshot> | null;
+
+  adopt(disposable: IDisposable): ILinkedNode<IDisposable>;
 }
 
 export interface IEffectAction extends INamedObject, IDisposable, IDirtyMarkable {
@@ -51,5 +53,9 @@ export interface IEffectAction extends INamedObject, IDisposable, IDirtyMarkable
   queueNode?: ILinkedNode<IEffectAction>;
 
   run(): void;
-  adopt(disposable: IDisposable): ILinkedNode<IDisposable>;
+}
+
+export interface IMemoValue<T>
+  extends INamedObject, IDisposable, IDirtyMarkable, IVersioned, IChangeListenerSource<IDirtyMarkable> {
+  readonly value: T;
 }

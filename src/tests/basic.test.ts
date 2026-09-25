@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { EffectAction } from '../base/effect-action';
+import { MemoValue } from '../base/memo-value';
 import { SignalValue } from '../base/signal-value';
 
 describe('SignalValue', () => {
@@ -172,4 +173,42 @@ describe('SignalValue & EffectAction', () => {
     expect(childRunCount).toBe(2);
     expect(list).toEqual([1, 2]);
   });
+});
+
+describe('SignalValue & MemoValue', () => {
+  test('baseic read and write', () => {
+    const s = new SignalValue(1);
+    let runCount = 0;
+    const m = new MemoValue(() => {
+      runCount += 1;
+      return s.value + 1;
+    });
+
+    expect(runCount).toBe(0);
+    expect(m.value).toBe(2);
+    expect(runCount).toBe(1);
+
+    s.setValue(2);
+    expect(runCount).toBe(1);
+    expect(m.value).toBe(3);
+    expect(runCount).toBe(2);
+  });
+
+  // test('the same object has not changed with custom comparer', () => {
+  //   const initialObj = { value: 1, label: 'default' };
+  //   const s = new SignalValue(initialObj);
+  //   let runCount = 0;
+  //
+  //   new EffectAction(() => {
+  //     runCount++;
+  //     void s.value;
+  //   });
+  //
+  //   expect(runCount).toBe(1);
+  //
+  //   // set a new object but get the equal result by the custom comparer
+  //   s.setValue({ value: 2, label: 'default' });
+  //   expect(runCount).toBe(1);
+  //   expect(s.value.value).toBe(1);
+  // });
 });
