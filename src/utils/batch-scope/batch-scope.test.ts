@@ -167,6 +167,63 @@ describe('BatchScope', () => {
     expect(() => leaked.depth).toThrow('[BatchScope]: context used outside its scope.');
     expectHealthy();
   });
+
+  test('isBatching is true exactly while some scope is open', () => {
+    const trace: boolean[] = [BatchScope.isBatching];
+
+    const context = BatchScope.begin();
+    try {
+      trace.push(BatchScope.isBatching);
+    } finally {
+      BatchScope.end(context);
+    }
+
+    trace.push(BatchScope.isBatching);
+
+    expect(trace).toEqual([false, true, false]);
+  });
+
+  test('isBatching stays true until the outermost scope ends', () => {
+    // Callers use this to decide whether to defer work, so ending an inner level must not make
+    // it look as if the batch is over while its parent is still running.
+    const trace: boolean[] = [];
+
+    const outer = BatchScope.begin();
+    try {
+      const inner = BatchScope.begin();
+      try {
+        trace.push(BatchScope.isBatching);
+      } finally {
+        BatchScope.end(inner);
+      }
+
+      trace.push(BatchScope.isBatching);
+    } finally {
+      BatchScope.end(outer);
+    }
+
+    trace.push(BatchScope.isBatching);
+
+    expect(trace).toEqual([true, true, false]);
+  });
+
+  test('isBatching is false again after a scope whose body threw', () => {
+    expect(() => {
+      const outer = BatchScope.begin();
+      try {
+        const inner = BatchScope.begin();
+        try {
+          throw new Error('boom');
+        } finally {
+          BatchScope.end(inner);
+        }
+      } finally {
+        BatchScope.end(outer);
+      }
+    }).toThrow('boom');
+
+    expect(BatchScope.isBatching).toBe(false);
+  });
 });
 
 /**
@@ -175,6 +232,9 @@ describe('BatchScope', () => {
  * fails where it was caused instead of surfacing as a baffling failure in some later test.
  */
 function expectHealthy(): void {
+  // A misuse that left any level open would keep every later caller deferring its work forever.
+  expect(BatchScope.isBatching).toBe(false);
+
   const depths: number[] = [];
 
   expect(() => {

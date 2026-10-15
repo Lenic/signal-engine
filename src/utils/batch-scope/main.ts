@@ -88,6 +88,10 @@ class BatchScopeContext implements IBatchScopeContext {
 export class BatchScope {
   private constructor() {}
 
+  static get isBatching() {
+    return currentDepth > -1;
+  }
+
   static begin(): IBatchScopeContext {
     return BatchScopeContext.begin();
   }
