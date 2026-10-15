@@ -2,6 +2,8 @@ import type { ILinkedList, ILinkedNode } from '../utils';
 
 import type { IAction, IDirtyMarkable, ISignalValue, IValueOptions } from './types';
 
+import { BatchScope } from '../utils';
+
 import { addChangeListener, notifyListeners } from './change-listener';
 import { globalContext } from './global-context';
 
@@ -66,6 +68,10 @@ export class SignalValue<T> implements ISignalValue<T> {
       if (this._hasBeenRead) {
         this._hasBeenRead = false;
         this.flush();
+
+        if (!BatchScope.isBatching) {
+          globalContext.consumeTail();
+        }
       }
     }
   }

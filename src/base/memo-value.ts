@@ -2,8 +2,6 @@ import type { ILinkedList, ILinkedNode } from '../utils';
 
 import type { IAction, IDirtyMarkable, IMemoValue, IValueOptions } from './types';
 
-import { ErrorScope } from '../utils';
-
 import { addChangeListener, notifyListeners } from './change-listener';
 import { globalContext } from './global-context';
 import { Runnable } from './runnable';
@@ -60,10 +58,6 @@ export class MemoValue<T> extends Runnable implements IMemoValue<T> {
     return this._listeners;
   }
 
-  notifyListeners(): void {
-    notifyListeners(this);
-  }
-
   addChangeListener(listener: IDirtyMarkable): ILinkedNode<IDirtyMarkable> {
     this.assertNotDisposed();
 
@@ -76,17 +70,7 @@ export class MemoValue<T> extends Runnable implements IMemoValue<T> {
     if (!this._hasBeenRead) return;
     this._hasBeenRead = false;
 
-    const ctx = ErrorScope.begin();
-    let node = this._listeners?.head;
-    while (node) {
-      try {
-        node.value.markDirty();
-      } catch (e) {
-        ctx.push(e);
-      }
-      node = node.next;
-    }
-    ErrorScope.end(ctx);
+    notifyListeners(this);
   }
 
   dispose(): void {

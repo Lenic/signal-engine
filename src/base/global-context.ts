@@ -49,27 +49,30 @@ export const globalContext = {
     if (this.isConsuming) return;
     this.isConsuming = true;
 
-    let depth = 0;
-    while (this.effectList.size) {
-      if (depth > MAX_ITERATION_DEPTH) {
-        throw new Error('[ConsumeTail]: more than the max iteration.');
-      }
-      depth += 1;
-
-      const ctx = ErrorScope.begin();
-      let node = this.effectList.head;
-      while (node) {
-        const next = node.next;
-        try {
-          node.value.run();
-        } catch (e) {
-          ctx.push(e);
+    try {
+      let depth = 0;
+      while (this.effectList.size) {
+        if (depth > MAX_ITERATION_DEPTH) {
+          throw new Error('[ConsumeTail]: more than the max iteration.');
         }
-        node.removeSelf();
-        node = next;
+        depth += 1;
+
+        const ctx = ErrorScope.begin();
+        let node = this.effectList.head;
+        while (node) {
+          const next = node.next;
+          try {
+            node.value.run();
+          } catch (e) {
+            ctx.push(e);
+          }
+          node.removeSelf();
+          node = next;
+        }
+        ErrorScope.end(ctx);
       }
+    } finally {
       this.isConsuming = false;
-      ErrorScope.end(ctx);
     }
   },
 };

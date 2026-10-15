@@ -2,8 +2,9 @@ import type { ILinkedList, ILinkedNode } from '../utils';
 
 import type { IDirtyMarkable } from './types';
 
-import { ErrorScope, LinkedList } from '../utils';
+import { BatchScope, ErrorScope, LinkedList } from '../utils';
 
+/** @internal */
 export interface IChangeListenHost {
   _listeners?: ILinkedList<IDirtyMarkable>;
 }
@@ -20,6 +21,7 @@ export function notifyListeners(host: IChangeListenHost): void {
   if (!node) return;
 
   const ctx = ErrorScope.begin();
+  const batchContext = BatchScope.begin();
   while (node) {
     try {
       node.value.markDirty();
@@ -28,5 +30,6 @@ export function notifyListeners(host: IChangeListenHost): void {
     }
     node = node.next;
   }
+  BatchScope.end(batchContext);
   ErrorScope.end(ctx);
 }
