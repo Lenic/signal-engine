@@ -194,6 +194,69 @@ describe('SignalValue & MemoValue', () => {
     expect(runCount).toBe(2);
   });
 
+  test('lazy evaluation and caching', () => {
+    const a = new SignalValue(1);
+    let runCount = 0;
+    const m = new MemoValue(() => {
+      runCount++;
+      return a.value * 10;
+    });
+
+    expect(runCount).toBe(0);
+
+    // First read
+    expect(m.value).toBe(10);
+    expect(runCount).toBe(1);
+
+    // Second read - should return cached value
+    expect(m.value).toBe(10);
+    expect(runCount).toBe(1);
+
+    // Update dependency but don't read - should not compute
+    a.setValue(2);
+    expect(runCount).toBe(1);
+
+    // Read after update - should recompute once
+    expect(m.value).toBe(20);
+    expect(runCount).toBe(2);
+
+    // Read again - should return cached
+    expect(m.value).toBe(20);
+    expect(runCount).toBe(2);
+  });
+
+  test('nested memos (chained dependencies)', () => {
+    const a = new SignalValue(2);
+    let bRunCount = 0;
+    let cRunCount = 0;
+
+    const b = new MemoValue(() => {
+      bRunCount++;
+      return a.value * 2; // 4
+    });
+
+    const c = new MemoValue(() => {
+      cRunCount++;
+      return b.value + 5; // 9
+    });
+
+    expect(bRunCount).toBe(0);
+    expect(cRunCount).toBe(0);
+
+    expect(c.value).toBe(9);
+    expect(bRunCount).toBe(1);
+    expect(cRunCount).toBe(1);
+
+    a.setValue(3);
+    // Values changed but not read
+    expect(bRunCount).toBe(1);
+    expect(cRunCount).toBe(1);
+
+    expect(c.value).toBe(11);
+    expect(bRunCount).toBe(2);
+    expect(cRunCount).toBe(2);
+  });
+
   // test('the same object has not changed with custom comparer', () => {
   //   const initialObj = { value: 1, label: 'default' };
   //   const s = new SignalValue(initialObj);

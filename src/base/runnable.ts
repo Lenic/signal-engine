@@ -28,7 +28,10 @@ export abstract class Runnable extends Disposable implements IDirtyMarkable, ICo
   protected execute<TResult = void, TDefaultValue = void>(
     action: IAction<[], TResult>,
     defalutValue: TDefaultValue,
+    adoptChild: boolean,
   ): TResult | TDefaultValue {
+    this.assertNotDisposed();
+
     const previousIsRunning = globalContext.isRunning;
     const previousActiveEffect = globalContext.activeEffect;
 
@@ -43,7 +46,9 @@ export abstract class Runnable extends Disposable implements IDirtyMarkable, ICo
         const ctx = ErrorScope.begin();
         try {
           this.releaseChildren();
-          previousActiveEffect?.adopt(this);
+          if (adoptChild) {
+            previousActiveEffect?.adopt(this);
+          }
 
           this.currentConnect = this.connectors.head;
           const result = action();
@@ -67,6 +72,8 @@ export abstract class Runnable extends Disposable implements IDirtyMarkable, ICo
   }
 
   adopt(disposable: IDisposable): ILinkedNode<IDisposable> {
+    this.assertNotDisposed();
+
     if (!this._children) {
       this._children = new LinkedList<IDisposable>();
     }
@@ -78,10 +85,8 @@ export abstract class Runnable extends Disposable implements IDirtyMarkable, ICo
 
     super.dispose();
 
-    this._name = undefined;
     this._isInitialized = false;
     this._isSelfRunning = false;
-    this._action = undefined as unknown as IAction;
 
     this.queueNode?.removeSelf();
 

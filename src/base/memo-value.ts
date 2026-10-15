@@ -65,33 +65,40 @@ export class MemoValue<T> extends Runnable implements IMemoValue<T> {
   }
 
   addChangeListener(listener: IDirtyMarkable): ILinkedNode<IDirtyMarkable> {
+    this.assertNotDisposed();
+
     return addChangeListener(this, listener);
   }
 
   markDirty(): void {
-    if (!this._hasBeenRead) return;
+    this.assertNotDisposed();
 
-    try {
-      const ctx = ErrorScope.begin();
-      let node = this._listeners?.head;
-      while (node) {
-        try {
-          node.value.markDirty();
-        } catch (e) {
-          ctx.push(e);
-        }
-        node = node.next;
+    if (!this._hasBeenRead) return;
+    this._hasBeenRead = false;
+
+    const ctx = ErrorScope.begin();
+    let node = this._listeners?.head;
+    while (node) {
+      try {
+        node.value.markDirty();
+      } catch (e) {
+        ctx.push(e);
       }
-      ErrorScope.end(ctx);
-    } finally {
-      this._hasBeenRead = false;
+      node = node.next;
     }
+    ErrorScope.end(ctx);
+  }
+
+  dispose(): void {
+    if (this.isDisposed) return;
+
+    this._getter = undefined as unknown as IAction<[], T>;
   }
 
   private refreshValue() {
-    if (this._hasBeenRead) return;
+    if (this._hasBeenRead || this.isDisposed) return;
 
-    const newValue = this.execute(this._getter, defaultValue);
+    const newValue = this.execute(this._getter, defaultValue, false);
     if (newValue !== defaultValue && !this.equal(newValue)) {
       this._value = newValue;
       this._version += 1;
