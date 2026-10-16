@@ -8,7 +8,7 @@ import { Runnable } from './runnable';
 
 const defaultValue = Symbol('default_memo_value');
 
-export class MemoValue<T> extends Runnable implements IMemoValue<T> {
+export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T> {
   private _name?: string;
   private _version: number;
   private _hasBeenRead: boolean;
@@ -82,7 +82,7 @@ export class MemoValue<T> extends Runnable implements IMemoValue<T> {
   private refreshValue() {
     if (this._hasBeenRead || this.isDisposed) return;
 
-    const newValue = this.execute(this._getter, defaultValue, false);
+    const newValue = this.execute(this._getter, defaultValue);
     if (newValue !== defaultValue && !this.equal(newValue)) {
       this._value = newValue;
       this._version += 1;

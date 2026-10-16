@@ -6,7 +6,7 @@ import { Disposable, ErrorScope, LinkedList } from '../utils';
 
 import { globalContext } from './global-context';
 
-export abstract class Runnable extends Disposable implements IDirtyMarkable, IConnectManager {
+export abstract class Runnable<T extends Runnable<T>> extends Disposable implements IDirtyMarkable, IConnectManager {
   private _isSelfRunning: boolean;
   private _isInitialized: boolean;
   private _children?: ILinkedList<IDisposable>;
@@ -26,48 +26,43 @@ export abstract class Runnable extends Disposable implements IDirtyMarkable, ICo
   abstract markDirty(): void;
 
   protected execute<TResult = void, TDefaultValue = void>(
-    action: IAction<[], TResult>,
+    action: IAction<[context: T, previousActiveEffect?: IDirtyMarkable & IConnectManager], TResult>,
     defalutValue: TDefaultValue,
-    adoptChild: boolean,
   ): TResult | TDefaultValue {
     this.assertNotDisposed();
 
-    const previousIsRunning = globalContext.isRunning;
+    if (this._isSelfRunning) {
+      throw new Error('[Runnable]: Cannot run iteratively.');
+    }
+    this._isSelfRunning = true;
+
     const previousActiveEffect = globalContext.activeEffect;
-
-    globalContext.isRunning = true;
+    const previousIsEffectRunning = globalContext.isEffectRunning;
     globalContext.activeEffect = this;
+    globalContext.isEffectRunning = true;
+
     try {
-      if (this._isSelfRunning) return defalutValue;
-      this._isSelfRunning = true;
+      if (!this.hasDependenciesChanged()) return defalutValue;
+
+      const ctx = ErrorScope.begin();
       try {
-        if (!this.hasDependenciesChanged()) return defalutValue;
+        this.releaseChildren();
 
-        const ctx = ErrorScope.begin();
-        try {
-          this.releaseChildren();
-          if (adoptChild) {
-            previousActiveEffect?.adopt(this);
-          }
-
-          this.currentConnect = this.connectors.head;
-          const result = action();
-          this.clearConnnectsTail();
-          return result;
-        } catch (e) {
-          ctx.push(e);
-          return defalutValue;
-        } finally {
-          ErrorScope.end(ctx);
-        }
+        this.currentConnect = this.connectors.head;
+        const result = action(this as unknown as T, previousActiveEffect);
+        this.clearConnnectsTail();
+        return result;
+      } catch (e) {
+        ctx.push(e);
+        return defalutValue;
       } finally {
-        this._isSelfRunning = false;
+        ErrorScope.end(ctx);
       }
     } finally {
-      globalContext.isRunning = previousIsRunning;
-      globalContext.activeEffect = previousActiveEffect;
+      this._isSelfRunning = false;
 
-      globalContext.consumeTail();
+      globalContext.activeEffect = previousActiveEffect;
+      globalContext.isEffectRunning = previousIsEffectRunning;
     }
   }
 

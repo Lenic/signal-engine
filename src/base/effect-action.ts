@@ -1,13 +1,13 @@
 import type { ILinkedNode } from '../utils';
 
-import type { IAction, IConnectManager, IEffectAction, INamedObject } from './types';
+import type { IAction, IConnectManager, IDirtyMarkable, IEffectAction, INamedObject } from './types';
 
 import { BatchScope } from '../utils';
 
 import { globalContext } from './global-context';
 import { Runnable } from './runnable';
 
-export class EffectAction extends Runnable implements IEffectAction, IConnectManager {
+export class EffectAction extends Runnable<EffectAction> implements IEffectAction, IConnectManager {
   private _name?: string;
   private _action: IAction;
 
@@ -25,7 +25,7 @@ export class EffectAction extends Runnable implements IEffectAction, IConnectMan
   }
 
   markDirty(): void {
-    if (!globalContext.isRunning && !BatchScope.isBatching) {
+    if (!globalContext.isEffectRunning && !BatchScope.isBatching) {
       this.run();
     } else {
       if (this.queueNode) return;
@@ -36,7 +36,9 @@ export class EffectAction extends Runnable implements IEffectAction, IConnectMan
   }
 
   run() {
-    this.execute(this._action, undefined, true);
+    this.assertNotDisposed();
+
+    this.execute(EffectAction.runAction, undefined);
   }
 
   dispose(): void {
@@ -46,6 +48,12 @@ export class EffectAction extends Runnable implements IEffectAction, IConnectMan
 
     this._name = undefined;
     this._action = undefined as unknown as IAction;
+  }
+
+  private static runAction(ctx: EffectAction, previousActiveEffect?: IDirtyMarkable & IConnectManager) {
+    previousActiveEffect?.adopt(ctx);
+
+    ctx.execute(ctx._action, undefined);
   }
 
   private static releaseQueueNode(node: ILinkedNode<IEffectAction>): void {

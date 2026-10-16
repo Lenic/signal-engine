@@ -257,6 +257,61 @@ describe('SignalValue & MemoValue', () => {
     expect(cRunCount).toBe(2);
   });
 
+  test('diamond dependency (glitch-free verification)', () => {
+    //   A
+    //  / \
+    // B   C
+    //  \ /
+    //   D (effect / read)
+    const a = new SignalValue(1, { name: 'a' });
+
+    let bCount = 0;
+    const b = new MemoValue(
+      () => {
+        bCount++;
+        return a.value + 10;
+      },
+      { name: 'b' },
+    );
+
+    let cCount = 0;
+    const c = new MemoValue(
+      () => {
+        cCount++;
+        return a.value * 100;
+      },
+      { name: 'c' },
+    );
+
+    let dCount = 0;
+    const dList: number[] = [];
+    new EffectAction(
+      () => {
+        dCount++;
+        dList.push(b.value + c.value);
+      },
+      { name: 'effect' },
+    );
+
+    // Initialization:
+    // a = 1 -> b = 11, c = 100 -> b+c = 111
+    expect(bCount).toBe(1);
+    expect(cCount).toBe(1);
+    expect(dCount).toBe(1);
+    expect(dList).toEqual([111]);
+
+    // Update A to 2:
+    // a = 2 -> b = 12, c = 200 -> b+c = 212
+    a.setValue(2);
+
+    // Verify glitch-free: effect E must only run ONCE with the fully settled states of B and C.
+    // There shouldn't be any intermediate/half-updated values like 12 + 100 (112) or 11 + 200 (211).
+    expect(bCount).toBe(2);
+    expect(cCount).toBe(2);
+    expect(dCount).toBe(2);
+    expect(dList).toEqual([111, 212]);
+  });
+
   // test('the same object has not changed with custom comparer', () => {
   //   const initialObj = { value: 1, label: 'default' };
   //   const s = new SignalValue(initialObj);
