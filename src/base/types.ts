@@ -30,7 +30,6 @@ export interface ISignalValue<T> extends IVersioned, INamedObject, IChangeListen
   readonly value: T;
   readonly version: number;
 
-  flush(): void;
   setValue(newValue: T, force?: boolean): void;
 }
 
@@ -44,11 +43,13 @@ export interface ISnapshot {
 export interface IConnectManager {
   connectors: ILinkedList<ISnapshot>;
   currentConnect?: ILinkedNode<ISnapshot> | null;
+}
 
+export interface IEffectOwner {
   adopt(disposable: IDisposable): ILinkedNode<IDisposable>;
 }
 
-export interface IEffectAction extends INamedObject, IDisposable, IDirtyMarkable {
+export interface IEffectAction extends INamedObject, IDisposable, IDirtyMarkable, IEffectOwner {
   /** @internal */
   queueNode?: ILinkedNode<IEffectAction>;
 

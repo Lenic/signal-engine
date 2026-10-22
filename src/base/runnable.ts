@@ -6,10 +6,10 @@ import { Disposable, ErrorScope, LinkedList } from '../utils';
 
 import { globalContext } from './global-context';
 
-export abstract class Runnable extends Disposable implements IDirtyMarkable, IConnectManager {
+export abstract class Runnable<T extends Runnable<T>> extends Disposable implements IDirtyMarkable, IConnectManager {
   private _isSelfRunning: boolean;
   private _isInitialized: boolean;
-  private _children?: ILinkedList<IDisposable>;
+  private _ownNode?: ILinkedNode<IDisposable>;
 
   connectors: ILinkedList<ISnapshot>;
   queueNode?: ILinkedNode<IEffectAction>;
@@ -21,63 +21,48 @@ export abstract class Runnable extends Disposable implements IDirtyMarkable, ICo
     this._isInitialized = false;
     this._isSelfRunning = false;
     this.connectors = new LinkedList<ISnapshot>();
+    this._ownNode = globalContext.activeOwner?.adopt(this);
   }
 
   abstract markDirty(): void;
 
   protected execute<TResult = void, TDefaultValue = void>(
-    action: IAction<[], TResult>,
+    action: IAction<[context: T], TResult>,
     defalutValue: TDefaultValue,
-    adoptChild: boolean,
   ): TResult | TDefaultValue {
     this.assertNotDisposed();
 
-    const previousIsRunning = globalContext.isRunning;
+    if (this._isSelfRunning) {
+      throw new Error('[Runnable]: Cannot run iteratively.');
+    }
+    this._isSelfRunning = true;
+
     const previousActiveEffect = globalContext.activeEffect;
-
-    globalContext.isRunning = true;
+    const previousIsEffectRunning = globalContext.isEffectRunning;
     globalContext.activeEffect = this;
+    globalContext.isEffectRunning = true;
+
     try {
-      if (this._isSelfRunning) return defalutValue;
-      this._isSelfRunning = true;
+      if (!this.hasDependenciesChanged()) return defalutValue;
+
+      const ctx = ErrorScope.begin();
       try {
-        if (!this.hasDependenciesChanged()) return defalutValue;
-
-        const ctx = ErrorScope.begin();
-        try {
-          this.releaseChildren();
-          if (adoptChild) {
-            previousActiveEffect?.adopt(this);
-          }
-
-          this.currentConnect = this.connectors.head;
-          const result = action();
-          this.clearConnnectsTail();
-          return result;
-        } catch (e) {
-          ctx.push(e);
-          return defalutValue;
-        } finally {
-          ErrorScope.end(ctx);
-        }
+        this.currentConnect = this.connectors.head;
+        const result = action(this as unknown as T);
+        this.clearConnnectsTail();
+        return result;
+      } catch (e) {
+        ctx.push(e);
+        return defalutValue;
       } finally {
-        this._isSelfRunning = false;
+        ErrorScope.end(ctx);
       }
     } finally {
-      globalContext.isRunning = previousIsRunning;
+      this._isSelfRunning = false;
+
       globalContext.activeEffect = previousActiveEffect;
-
-      globalContext.consumeTail();
+      globalContext.isEffectRunning = previousIsEffectRunning;
     }
-  }
-
-  adopt(disposable: IDisposable): ILinkedNode<IDisposable> {
-    this.assertNotDisposed();
-
-    if (!this._children) {
-      this._children = new LinkedList<IDisposable>();
-    }
-    return this._children.append(disposable);
   }
 
   dispose(): void {
@@ -89,8 +74,10 @@ export abstract class Runnable extends Disposable implements IDirtyMarkable, ICo
     this._isSelfRunning = false;
 
     this.queueNode?.removeSelf();
+    this.queueNode = undefined;
 
-    this.releaseChildren();
+    this._ownNode?.removeSelf();
+    this._ownNode = undefined;
 
     this.currentConnect = null;
     let node = this.connectors.head;
@@ -100,15 +87,6 @@ export abstract class Runnable extends Disposable implements IDirtyMarkable, ICo
       node = this.connectors.head;
     }
     this.connectors = undefined as unknown as ILinkedList<ISnapshot>;
-  }
-
-  private releaseChildren() {
-    let node = this._children?.head;
-    while (node) {
-      node.value?.dispose();
-      node.removeSelf();
-      node = this._children?.head;
-    }
   }
 
   private clearConnnectsTail() {

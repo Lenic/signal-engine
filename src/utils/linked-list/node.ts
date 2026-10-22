@@ -55,15 +55,11 @@ export class LinkedNode<T> implements ILinkedNode<T> {
   }
 
   removeSelf(): void {
-    this.assertNotCleared();
-
-    this.list.remove(this);
+    this.list?.remove(this);
   }
 
   /** @internal */
   clear(): void {
-    this.assertNotCleared();
-
     try {
       this.onBeforeClear?.(this);
     } finally {

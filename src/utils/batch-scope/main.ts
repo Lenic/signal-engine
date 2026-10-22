@@ -92,11 +92,17 @@ export class BatchScope {
     return currentDepth > -1;
   }
 
+  static onExited?: (depth: number) => void;
+
   static begin(): IBatchScopeContext {
     return BatchScopeContext.begin();
   }
 
   static end(context: IBatchScopeContext): void {
-    return BatchScopeContext.end(context);
+    try {
+      return BatchScopeContext.end(context);
+    } finally {
+      this.onExited?.(currentDepth);
+    }
   }
 }

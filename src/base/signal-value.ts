@@ -2,10 +2,10 @@ import type { ILinkedList, ILinkedNode } from '../utils';
 
 import type { IAction, IDirtyMarkable, ISignalValue, IValueOptions } from './types';
 
-import { BatchScope } from '../utils';
+import { LinkedList } from '../utils';
 
-import { addChangeListener, notifyListeners } from './change-listener';
 import { globalContext } from './global-context';
+import { notifyListeners } from './utils';
 
 export class SignalValue<T> implements ISignalValue<T> {
   private _value: T;
@@ -13,9 +13,7 @@ export class SignalValue<T> implements ISignalValue<T> {
   private _version: number;
   private _hasBeenRead: boolean;
   private _comparer?: IAction<[T, T], boolean>;
-
-  /** @internal */
-  _listeners?: ILinkedList<IDirtyMarkable> | undefined;
+  private _listeners?: ILinkedList<IDirtyMarkable> | undefined;
 
   constructor(value: T, options?: IValueOptions<T>) {
     this._version = 0;
@@ -45,12 +43,8 @@ export class SignalValue<T> implements ISignalValue<T> {
     return this._listeners;
   }
 
-  flush(): void {
-    notifyListeners(this);
-  }
-
   addChangeListener(listener: IDirtyMarkable): ILinkedNode<IDirtyMarkable> {
-    return addChangeListener(this, listener);
+    return (this._listeners ??= new LinkedList<IDirtyMarkable>()).append(listener);
   }
 
   setValue(newValue: T, force?: boolean): void {
@@ -67,11 +61,7 @@ export class SignalValue<T> implements ISignalValue<T> {
        */
       if (this._hasBeenRead) {
         this._hasBeenRead = false;
-        this.flush();
-
-        if (!BatchScope.isBatching) {
-          globalContext.consumeTail();
-        }
+        notifyListeners(this._listeners, SignalValue.publish);
       }
     }
   }
@@ -81,5 +71,9 @@ export class SignalValue<T> implements ISignalValue<T> {
     if (!this._comparer) return false;
 
     return this._comparer(this._value, target);
+  }
+
+  private static publish(target: IDirtyMarkable) {
+    target.markDirty();
   }
 }

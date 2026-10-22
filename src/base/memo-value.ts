@@ -2,22 +2,22 @@ import type { ILinkedList, ILinkedNode } from '../utils';
 
 import type { IAction, IDirtyMarkable, IMemoValue, IValueOptions } from './types';
 
-import { addChangeListener, notifyListeners } from './change-listener';
+import { LinkedList } from '../utils';
+
 import { globalContext } from './global-context';
 import { Runnable } from './runnable';
+import { notifyListeners } from './utils';
 
 const defaultValue = Symbol('default_memo_value');
 
-export class MemoValue<T> extends Runnable implements IMemoValue<T> {
+export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T> {
   private _name?: string;
   private _version: number;
   private _hasBeenRead: boolean;
   private _getter: IAction<[], T>;
   private _value: T | typeof defaultValue;
   private _comparer?: IAction<[T, T], boolean>;
-
-  /** @internal */
-  _listeners?: ILinkedList<IDirtyMarkable> | undefined;
+  private _listeners?: ILinkedList<IDirtyMarkable> | undefined;
 
   constructor(getter: IAction<[], T>, options?: IValueOptions<T>) {
     super();
@@ -61,7 +61,7 @@ export class MemoValue<T> extends Runnable implements IMemoValue<T> {
   addChangeListener(listener: IDirtyMarkable): ILinkedNode<IDirtyMarkable> {
     this.assertNotDisposed();
 
-    return addChangeListener(this, listener);
+    return (this._listeners ??= new LinkedList<IDirtyMarkable>()).append(listener);
   }
 
   markDirty(): void {
@@ -70,7 +70,7 @@ export class MemoValue<T> extends Runnable implements IMemoValue<T> {
     if (!this._hasBeenRead) return;
     this._hasBeenRead = false;
 
-    notifyListeners(this);
+    notifyListeners(this._listeners, MemoValue.publish);
   }
 
   dispose(): void {
@@ -82,7 +82,7 @@ export class MemoValue<T> extends Runnable implements IMemoValue<T> {
   private refreshValue() {
     if (this._hasBeenRead || this.isDisposed) return;
 
-    const newValue = this.execute(this._getter, defaultValue, false);
+    const newValue = this.execute(this._getter, defaultValue);
     if (newValue !== defaultValue && !this.equal(newValue)) {
       this._value = newValue;
       this._version += 1;
@@ -95,5 +95,9 @@ export class MemoValue<T> extends Runnable implements IMemoValue<T> {
     if (this._value === defaultValue) return false;
 
     return this._comparer(this._value, target);
+  }
+
+  private static publish(target: IDirtyMarkable) {
+    target.markDirty();
   }
 }
