@@ -76,7 +76,12 @@ export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T
   dispose(): void {
     if (this.isDisposed) return;
 
+    super.dispose();
+
     this._getter = undefined as unknown as IAction<[], T>;
+
+    notifyListeners(this._listeners, null, true);
+    this._listeners = undefined;
   }
 
   private refreshValue() {

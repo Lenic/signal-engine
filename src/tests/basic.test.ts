@@ -312,6 +312,25 @@ describe('SignalValue & MemoValue', () => {
     expect(dList).toEqual([111, 212]);
   });
 
+  test('memo disposal', () => {
+    const a = new SignalValue(1);
+    let runCount = 0;
+    const m = new MemoValue(() => {
+      runCount++;
+      return a.value * 2;
+    });
+
+    expect(m.value).toBe(2);
+    expect(runCount).toBe(1);
+
+    m.dispose();
+    a.setValue(2);
+
+    // After disposal, dependency link is severed, it should just return the last cached value
+    expect(m.value).toBe(2);
+    expect(runCount).toBe(1);
+  });
+
   // test('the same object has not changed with custom comparer', () => {
   //   const initialObj = { value: 1, label: 'default' };
   //   const s = new SignalValue(initialObj);

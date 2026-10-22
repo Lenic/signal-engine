@@ -50,9 +50,6 @@ export interface IEffectOwner {
 }
 
 export interface IEffectAction extends INamedObject, IDisposable, IDirtyMarkable, IEffectOwner {
-  /** @internal */
-  queueNode?: ILinkedNode<IEffectAction>;
-
   run(): void;
 }
 
