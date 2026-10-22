@@ -4,6 +4,12 @@ import type { IAction } from './types';
 
 import { BatchScope, ErrorScope } from '../utils';
 
+let clock = 0;
+export function getClock() {
+  clock += 1;
+  return clock;
+}
+
 export function notifyListeners<T>(
   list: ILinkedList<T> | undefined,
   action: IAction<[T]> | null,

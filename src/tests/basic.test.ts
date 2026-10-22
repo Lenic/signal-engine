@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { EffectAction } from '../base/effect-action';
 import { MemoValue } from '../base/memo-value';
 import { SignalValue } from '../base/signal-value';
+import { BatchScope } from '../utils';
 
 describe('SignalValue', () => {
   test('basic read and write', () => {
@@ -348,4 +349,57 @@ describe('SignalValue & MemoValue', () => {
   //   expect(runCount).toBe(1);
   //   expect(s.value.value).toBe(1);
   // });
+});
+
+describe('Batch', () => {
+  test('basic read and write', () => {
+    const a = new SignalValue(1);
+
+    let runCount = 0;
+    const m = new MemoValue(() => {
+      runCount++;
+      return a.value * 10;
+    });
+
+    const ctx = BatchScope.begin();
+    try {
+      a.setValue(2);
+      a.setValue(3);
+    } finally {
+      BatchScope.end(ctx);
+    }
+
+    expect(m.value).toBe(30);
+    expect(runCount).toBe(1);
+  });
+
+  test('a version restored by the batch rollback must not be reused by a later write', () => {
+    const a = new SignalValue(1);
+
+    let runCount = 0;
+    const m = new MemoValue(() => {
+      runCount++;
+      return a.value * 10;
+    });
+
+    expect(m.value).toBe(10);
+    expect(runCount).toBe(1);
+
+    const context = BatchScope.begin();
+    try {
+      a.setValue(2);
+      expect(m.value).toBe(20);
+      expect(runCount).toBe(2);
+
+      a.setValue(1);
+    } finally {
+      BatchScope.end(context);
+    }
+
+    a.setValue(3);
+    expect(runCount).toBe(2);
+
+    expect(m.value).toBe(30);
+    expect(runCount).toBe(3);
+  });
 });

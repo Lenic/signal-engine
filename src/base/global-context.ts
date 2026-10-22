@@ -1,6 +1,7 @@
 import type { ILinkedList } from '../utils';
 
 import type {
+  IBatchSnapshot,
   IChangeListenerSource,
   IConnectManager,
   IDirtyMarkable,
@@ -11,6 +12,8 @@ import type {
 
 import { BatchScope, ErrorScope, LinkedList } from '../utils';
 
+import { notifyListeners } from './utils';
+
 const MAX_ITERATION_DEPTH = 100;
 
 let inactiveEffectList: ILinkedList<IEffectAction> = new LinkedList<IEffectAction>();
@@ -19,6 +22,7 @@ export const globalContext = {
   isEffectRunning: false,
   activeOwner: undefined as IEffectOwner | undefined,
   effectList: new LinkedList<IEffectAction>() as ILinkedList<IEffectAction>,
+  batchSnapshots: new LinkedList<IBatchSnapshot>() as ILinkedList<IBatchSnapshot>,
   activeEffect: undefined as (IDirtyMarkable & IConnectManager) | undefined,
   track(source: IVersioned & IChangeListenerSource<IDirtyMarkable>): void {
     if (!this.activeEffect) return;
@@ -58,7 +62,11 @@ export const globalContext = {
 
 let isConsuming = false;
 function consumeTail(depth: number) {
-  if (isConsuming || depth !== -1) return;
+  if (depth !== -1) return;
+
+  notifyListeners(globalContext.batchSnapshots, null, true);
+
+  if (isConsuming) return;
   isConsuming = true;
 
   try {
@@ -75,16 +83,16 @@ function consumeTail(depth: number) {
       }
       iterationLevel += 1;
 
-      const ctx = ErrorScope.begin();
+      const errorContext = ErrorScope.begin();
       while (list.head) {
         try {
           list.head.value.run();
         } catch (e) {
-          ctx.push(e);
+          errorContext.push(e);
         }
         list.head.removeSelf();
       }
-      ErrorScope.end(ctx);
+      ErrorScope.end(errorContext);
     }
   } finally {
     isConsuming = false;

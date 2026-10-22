@@ -33,6 +33,12 @@ export interface ISignalValue<T> extends IVersioned, INamedObject, IChangeListen
   setValue(newValue: T, force?: boolean): void;
 }
 
+export interface IBatchSnapshot<T = unknown> {
+  instance: ISignalValue<T>;
+  version: number;
+  value: T;
+}
+
 export interface ISnapshot {
   version: number;
   instance: IVersioned;

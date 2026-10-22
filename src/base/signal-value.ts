@@ -1,11 +1,11 @@
 import type { ILinkedList, ILinkedNode } from '../utils';
 
-import type { IAction, IDirtyMarkable, ISignalValue, IValueOptions } from './types';
+import type { IAction, IBatchSnapshot, IDirtyMarkable, ISignalValue, IValueOptions } from './types';
 
-import { LinkedList } from '../utils';
+import { BatchScope, LinkedList } from '../utils';
 
 import { globalContext } from './global-context';
-import { notifyListeners } from './utils';
+import { getClock, notifyListeners } from './utils';
 
 export class SignalValue<T> implements ISignalValue<T> {
   private _value: T;
@@ -13,7 +13,8 @@ export class SignalValue<T> implements ISignalValue<T> {
   private _version: number;
   private _hasBeenRead: boolean;
   private _comparer?: IAction<[T, T], boolean>;
-  private _listeners?: ILinkedList<IDirtyMarkable> | undefined;
+  private _listeners?: ILinkedList<IDirtyMarkable>;
+  private _batchQueueNode?: ILinkedNode<IBatchSnapshot>;
 
   constructor(value: T, options?: IValueOptions<T>) {
     this._version = 0;
@@ -49,7 +50,16 @@ export class SignalValue<T> implements ISignalValue<T> {
 
   setValue(newValue: T, force?: boolean): void {
     if (force || !this.equal(newValue)) {
-      this._version += 1;
+      if (BatchScope.isBatching && !this._batchQueueNode) {
+        this._batchQueueNode = globalContext.batchSnapshots.append({
+          instance: this as SignalValue<unknown>,
+          version: this.version,
+          value: this.value,
+        });
+        this._batchQueueNode.onBeforeClear = SignalValue.releaseFromBatch;
+      }
+
+      this._version = getClock();
       this._value = newValue;
 
       /**
@@ -75,5 +85,16 @@ export class SignalValue<T> implements ISignalValue<T> {
 
   private static publish(target: IDirtyMarkable) {
     target.markDirty();
+  }
+
+  private static releaseFromBatch(node: ILinkedNode<IBatchSnapshot>) {
+    const { instance, value, version } = node.value;
+    const target = instance as SignalValue<unknown>;
+
+    target._batchQueueNode = undefined;
+    if (target.equal(value)) {
+      target._value = value;
+      target._version = version;
+    }
   }
 }
