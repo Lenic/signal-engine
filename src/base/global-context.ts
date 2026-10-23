@@ -61,41 +61,46 @@ export const globalContext = {
 };
 
 let isConsuming = false;
-function consumeTail(depth: number) {
-  if (depth !== -1) return;
-
+function consumeTail() {
   notifyListeners(globalContext.batchSnapshots, null, true);
 
   if (isConsuming) return;
   isConsuming = true;
 
+  const errorContext = ErrorScope.begin();
   try {
     let iterationLevel = 0;
-
-    // hot path: destructiong assignment is prohibited
-    const list = globalContext.effectList;
-    globalContext.effectList = inactiveEffectList;
-    inactiveEffectList = list;
-
-    while (list.size) {
+    while (globalContext.effectList.size) {
       if (iterationLevel > MAX_ITERATION_DEPTH) {
         throw new Error('[ConsumeTail]: more than the max iteration.');
       }
       iterationLevel += 1;
 
-      const errorContext = ErrorScope.begin();
-      while (list.head) {
-        try {
-          list.head.value.run();
-        } catch (e) {
-          errorContext.push(e);
+      // hot path: destructiong assignment is prohibited
+      const list = globalContext.effectList;
+      globalContext.effectList = inactiveEffectList;
+      inactiveEffectList = list;
+
+      while (list.size) {
+        while (list.head) {
+          const node = list.head;
+          try {
+            node.value.run();
+          } catch (e) {
+            errorContext.push(e);
+          }
+          node.removeSelf();
         }
-        list.head.removeSelf();
       }
-      ErrorScope.end(errorContext);
     }
+  } catch (e) {
+    errorContext.push(e);
   } finally {
     isConsuming = false;
+    ErrorScope.end(errorContext);
   }
 }
-BatchScope.onExited = consumeTail;
+BatchScope.onBeforeExit = (depth: number) => {
+  if (depth !== -1) return;
+  consumeTail();
+};

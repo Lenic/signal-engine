@@ -3,6 +3,7 @@ import type { IBatchScopeContext } from './types';
 let currentDepth = -1;
 const MAX_ITERATION_DEPTH = 100;
 const pool: BatchScopeContext[] = [];
+let beforeExitCallback: ((depth: number) => void) | undefined;
 
 class BatchScopeContext implements IBatchScopeContext {
   private isOpen: boolean;
@@ -33,8 +34,13 @@ class BatchScopeContext implements IBatchScopeContext {
       pool[i].isOpen = false;
     }
 
-    currentDepth = Math.min(currentDepth, this.iterationDepth - 1);
-    this.isOpen = false;
+    const nextDepth = Math.min(currentDepth, this.iterationDepth - 1);
+    try {
+      beforeExitCallback?.(nextDepth);
+    } finally {
+      currentDepth = nextDepth;
+      this.isOpen = false;
+    }
   }
 
   private assertOpen(): void {
@@ -92,17 +98,15 @@ export class BatchScope {
     return currentDepth > -1;
   }
 
-  static onExited?: (depth: number) => void;
+  static set onBeforeExit(callback: ((depth: number) => void) | undefined) {
+    beforeExitCallback = callback;
+  }
 
   static begin(): IBatchScopeContext {
     return BatchScopeContext.begin();
   }
 
   static end(context: IBatchScopeContext): void {
-    try {
-      return BatchScopeContext.end(context);
-    } finally {
-      this.onExited?.(currentDepth);
-    }
+    return BatchScopeContext.end(context);
   }
 }
