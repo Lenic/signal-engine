@@ -257,7 +257,7 @@ describe('LinkedList', () => {
       expect(numberNode.value).toBeUndefined();
     });
 
-    test('every operation on a removed node is rejected', () => {
+    test('insertions around a removed node are rejected', () => {
       const list = new LinkedList<number>();
       const node = list.append(1);
       node.removeSelf();
@@ -266,7 +266,18 @@ describe('LinkedList', () => {
       // would even go.
       expect(() => node.insertBefore(2)).toThrow('[LinkedNode]: can not find the owning list.');
       expect(() => node.insertAfter(3)).toThrow('[LinkedNode]: can not find the owning list.');
-      expect(() => node.removeSelf()).toThrow('[LinkedNode]: can not find the owning list.');
+    });
+
+    test('removing an already removed node is a no-op', () => {
+      const list = new LinkedList<number>();
+      const node = list.append(1);
+      list.append(2);
+      node.removeSelf();
+
+      // Owners may release the same node from several paths (e.g. dispose() and a queue drain),
+      // so a second removeSelf() must neither throw nor touch the former list.
+      expect(() => node.removeSelf()).not.toThrow();
+      expectList(list, [2]);
     });
 
     test('handing a removed node back to its former list is rejected', () => {
