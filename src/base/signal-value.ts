@@ -53,8 +53,9 @@ export class SignalValue<T> implements ISignalValue<T> {
       if (BatchScope.isBatching && !this._batchQueueNode) {
         this._batchQueueNode = globalContext.batchSnapshots.append({
           instance: this as SignalValue<unknown>,
-          version: this.version,
-          value: this.value,
+          version: this._version,
+          value: this._value,
+          hasBeenRead: this._hasBeenRead,
         });
         this._batchQueueNode.onBeforeClear = SignalValue.releaseFromBatch;
       }
@@ -88,13 +89,14 @@ export class SignalValue<T> implements ISignalValue<T> {
   }
 
   private static releaseFromBatch(node: ILinkedNode<IBatchSnapshot>) {
-    const { instance, value, version } = node.value;
+    const { instance, value, version, hasBeenRead } = node.value;
     const target = instance as SignalValue<unknown>;
 
     target._batchQueueNode = undefined;
     if (target.equal(value)) {
       target._value = value;
       target._version = version;
+      target._hasBeenRead = hasBeenRead;
     }
   }
 }

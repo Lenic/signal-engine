@@ -37,6 +37,7 @@ export interface IBatchSnapshot<T = unknown> {
   instance: ISignalValue<T>;
   version: number;
   value: T;
+  hasBeenRead: boolean;
 }
 
 export interface ISnapshot {

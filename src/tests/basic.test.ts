@@ -402,4 +402,55 @@ describe('Batch', () => {
     expect(m.value).toBe(30);
     expect(runCount).toBe(3);
   });
+
+  test('a write after the batch rollback must still notify the effect', () => {
+    const a = new SignalValue(1);
+
+    const seen: number[] = [];
+    new EffectAction(() => {
+      seen.push(a.value);
+    });
+
+    const context = BatchScope.begin();
+    try {
+      a.setValue(2);
+      a.setValue(1);
+    } finally {
+      BatchScope.end(context);
+    }
+
+    // the rollback restores the version, so the queued effect is skipped
+    expect(seen).toEqual([1]);
+
+    // the skipped effect never reads `a` again, so `a` must not stay marked as unread
+    a.setValue(3);
+    expect(seen).toEqual([1, 3]);
+  });
+
+  test('a write after the batch rollback must still reach the effect through a memo', () => {
+    const a = new SignalValue(1);
+    const m = new MemoValue(() => a.value * 10);
+
+    const seen: number[] = [];
+    new EffectAction(() => {
+      seen.push(m.value);
+    });
+
+    const context = BatchScope.begin();
+    try {
+      a.setValue(2);
+      a.setValue(1);
+    } finally {
+      BatchScope.end(context);
+    }
+
+    expect(seen).toEqual([10]);
+
+    // restoring the read mark of `a` alone is not enough: `m` was marked dirty in the batch
+    // and only its version is checked afterwards, so `m` must not stay marked as unread either
+    a.setValue(3);
+    expect(seen).toEqual([10, 30]);
+  });
 });
+
+// describe('TestSuite', () => {});

@@ -51,6 +51,8 @@ export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T
     if (this._hasBeenRead) return this._version;
 
     this.refreshValue();
+    this._hasBeenRead = true;
+
     return this._version;
   }
 
