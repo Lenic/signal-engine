@@ -76,7 +76,7 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
   }
 
   private static releaseQueueNode(node: ILinkedNode<IEffectAction>): void {
-    node.value.queueNode = undefined;
+    (node.value as EffectAction).queueNode = undefined;
   }
 
   private static releaseItem(disposable: IDisposable): void {
