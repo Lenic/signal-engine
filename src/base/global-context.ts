@@ -1,4 +1,4 @@
-import type { ILinkedList } from '../utils';
+import type { IDisposable, ILinkedList } from '../utils';
 
 import type {
   IBatchSnapshot,
@@ -23,9 +23,10 @@ export const globalContext = {
   activeOwner: undefined as IEffectOwner | undefined,
   effectList: new LinkedList<IEffectAction>() as ILinkedList<IEffectAction>,
   batchSnapshots: new LinkedList<IBatchSnapshot>() as ILinkedList<IBatchSnapshot>,
-  activeEffect: undefined as (IDirtyMarkable & IConnectManager) | undefined,
+  activeEffect: undefined as (IDirtyMarkable & IConnectManager & IDisposable) | undefined,
   track(source: IVersioned & IChangeListenerSource<IDirtyMarkable>): void {
     if (!this.activeEffect) return;
+    if (this.activeEffect.isDisposed) return;
 
     const ctx = ErrorScope.begin();
     try {
