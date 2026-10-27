@@ -45,6 +45,9 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
     try {
       if (!this.hasDependenciesChanged()) return defalutValue;
 
+      // maybe dispose current instance in the dependencies.
+      if (this.isDisposed) return defalutValue;
+
       const ctx = ErrorScope.begin();
       try {
         this.currentConnect = this.connectors.head;
