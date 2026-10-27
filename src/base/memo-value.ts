@@ -41,9 +41,7 @@ export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T
       throw new Error('[MemoValue]: must return value from getter() method');
     }
 
-    this._hasBeenRead = true;
     globalContext.track(this);
-
     return this._value;
   }
 
@@ -51,8 +49,6 @@ export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T
     if (this._hasBeenRead) return this._version;
 
     this.refreshValue();
-    this._hasBeenRead = true;
-
     return this._version;
   }
 
@@ -89,6 +85,7 @@ export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T
   private refreshValue() {
     if (this._hasBeenRead || this.isDisposed) return;
 
+    this._hasBeenRead = true;
     const newValue = this.execute(this._getter, defaultValue);
     if (newValue !== defaultValue && !this.equal(newValue)) {
       this._value = newValue;
