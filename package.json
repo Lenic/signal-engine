@@ -3,11 +3,11 @@
   "author": "lenic",
   "license": "MIT",
   "type": "module",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "Implement signal by typescript",
-  "types": "./dist/index.d.mts",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./dist/index.mjs",
+    ".": "./dist/index.js",
     "./package.json": "./package.json"
   },
   "files": [
