@@ -7,8 +7,6 @@ downstream stays correct without you wiring a thing.
 [![License](https://img.shields.io/npm/l/@lenic/signal?color=green&style=flat-square)](https://github.com/lenic/signal-engine/blob/main/LICENSE)
 [![NPM Downloads](https://img.shields.io/npm/dm/@lenic/signal?color=gradient&style=flat-square)](https://www.npmjs.com/package/@lenic/signal)
 
-🌐 **[简体中文](./README.zh-CN.md)** · **[日本語](./README.ja.md)**
-
 > This started as a personal exercise, something to show what I could build while interviewing, and
 > it kept growing until it covered the whole feature set.
 
@@ -41,19 +39,20 @@ rest.
 [`reactive-framework-test-suite`](https://www.npmjs.com/package/reactive-framework-test-suite)
 is 179 cases covering glitch-freedom, dynamic dependencies, batching, disposal ordering, cycle
 detection and error recovery. Those are the corners where reactive engines differ in ways nobody
-documents. This one passes **179 / 179 with nothing skipped**, plus 90 tests of its own. Run
+documents. This one passes **179 / 179 with nothing skipped**, plus 93 tests of its own. Run
 `pnpm test` and check.
 
 **Everything is synchronous.** A write settles before the next line of your code runs. No
 microtask queue, no "wait a tick and it will be consistent". That makes it easy to test, and easy
 to follow when something goes wrong.
 
-**Nothing outlives its owner.** Anything created while a `memo` or `effect` is running belongs to
-that run: nested effects, cleanup functions, adopted resources. When the owner re-runs or is
-disposed, they all go with it, recursively.
+**Nothing outlives its owner.** Anything created while an `effect` is running belongs to that run:
+nested effects, memos, cleanup functions. When the effect re-runs or is disposed, they all go with
+it, recursively.
 
-**No spin on the speed.** Propagation is competitive, construction is not yet. The whole table,
-losses included, is [further down](#performance).
+**Errors do not get lost.** An effect that throws does not stop the others from running. Every
+error raised during a propagation is collected, and rethrown once the outermost write or batch
+finishes: as-is when there is one, as an `AggregateError` when there are several.
 
 ---
 
@@ -69,8 +68,6 @@ yarn add @lenic/signal
 
 ## API
 
-Four functions. That is the whole surface.
-
 ### `signal(initialValue, options?)`
 
 A value you can read and write. Call it with no arguments to read, with one to write.
@@ -84,7 +81,7 @@ count();      // → 5
 ```
 
 Writing a value that compares equal to the current one changes nothing and notifies nobody.
-Equality is `===` by default; pass your own when that is too strict:
+Equality is `Object.is` by default; pass a `comparer` when that is too strict:
 
 ```typescript
 const deepEqual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -94,7 +91,9 @@ config({ theme: 'dark' });   // a new object, but nothing downstream re-runs
 config({ theme: 'light' });  // this one propagates
 ```
 
-### `memo(fn)`
+`options.name` is an optional label for debugging.
+
+### `memo(getter, options?)`
 
 A derived value. It does not run until something reads it, and the result stays cached until one of
 its dependencies actually changes.
@@ -126,9 +125,9 @@ effect(() => console.log(isOdd()));  // → true
 n(3);  // `n` changed, `isOdd` recomputed, still true → the effect does not re-run
 ```
 
-Call `total.dispose()` when you are done with a memo that is not owned by anything else.
+It takes the same `comparer` and `name` options as `signal`.
 
-### `effect(fn)`
+### `effect(fn, options?)`
 
 Runs `fn` immediately, tracks whatever it reads, and runs it again whenever any of that changes.
 Returns a function that stops it.
@@ -140,7 +139,7 @@ const stop = effect(() => {
   document.title = user();
 });
 
-user('grace');   // title updates
+user('grace');      // title updates
 stop();
 user('katherine');  // nothing happens
 ```
@@ -149,7 +148,7 @@ The first run is always synchronous, whether on creation, inside a batch, or ins
 effect. By the time `effect()` returns, the body has run and its dependencies are live.
 
 **Return a function to clean up after yourself.** It runs before the next re-run, and once more
-when the effect is disposed:
+when the effect is stopped. It runs untracked, so whatever it reads does not become a dependency:
 
 ```typescript
 const channel = signal('general');
@@ -161,32 +160,64 @@ effect(() => {
 });
 ```
 
-### `batch(fn)`
+An effect that writes to a signal it also reads does not recurse: the write is noted, and the effect
+runs once more after the current run finishes. A cycle that never settles is cut off after 100
+rounds with an error, instead of hanging the process.
+
+### `beginBatch()` / `endBatch(context)`
 
 Groups writes so that everything downstream sees one settled result instead of each intermediate
-step.
+step. Always pair them with `try` / `finally`:
 
 ```typescript
+import { beginBatch, endBatch } from '@lenic/signal';
+
 const width = signal(10);
 const height = signal(20);
 
 effect(() => console.log(width() * height()));  // → 200
 
-batch(() => {
+const ctx = beginBatch();
+try {
   width(30);
   height(40);
-});
+} finally {
+  endBatch(ctx);
+}
 // → 1200, once — not 600 then 1200
 ```
 
-Batching is synchronous too: the flush happens as `batch()` returns, not on a later tick. And if
-the writes cancel out (set to something else and back again), nothing downstream runs at all.
+Inside a batch, a write takes effect immediately for anyone reading it, but effects wait. They run
+as the outermost `endBatch()` returns, not on a later tick. Batches nest. And if the writes cancel
+out (set to something else and back again), nothing downstream runs at all.
+
+`endBatch()` checks that it is closing the scope `beginBatch()` opened. Passing the wrong context
+throws, but the scope still closes, so one mistake does not leave every later write deferred.
+
+### `untrack(fn)`
+
+Runs `fn` and returns its result without recording anything it reads as a dependency.
+
+```typescript
+const a = signal(1);
+const b = signal(1);
+
+effect(() => {
+  console.log(a(), untrack(() => b()));
+});
+
+b(2);  // silence: `b` was read untracked
+a(2);  // → 2 2
+```
+
+Anything created inside `untrack` has no owner either, so an effect started there lives until you
+stop it yourself.
 
 ---
 
 ## Lifecycle
 
-Anything created while a `memo` or `effect` is running is owned by that run.
+Anything created while an `effect` is running is owned by that run.
 
 ```typescript
 const outer = signal(0);
@@ -207,43 +238,42 @@ inner(2);   // silence
 The same holds when the owner merely re-runs: the previous run's children are disposed before the
 new run creates its replacements. Nothing accumulates.
 
+A `memo` is not an owner. Something created while a memo computes belongs to whichever effect is
+running at the time, or to nothing.
+
 ---
 
 ## How it works
 
-Two directions of traffic, and every piece exists to serve one of them.
+Two directions of traffic: readers pull **versions**, sources push **dirty marks**.
 
 ```mermaid
 flowchart LR
-    S(["signal / memo"]) -->|owns| L["<b>VersionLeader</b><br>version · dirty flag · followers"]
-    L -->|"marks dirty"| F["<b>VersionFollower</b><br>the dirty inbox of one reader"]
-    F -->|belongs to| R(["memo / effect"])
-    R -->|owns| C["<b>ConnectorManager</b><br>one slot per dependency,<br>matched by read order"]
-    C -->|"records the version of"| L
+    S(["SignalValue / MemoValue"]) -->|"listeners"| R(["MemoValue / EffectAction"])
+    R -->|"connectors:<br>one slot per dependency,<br>matched by read order"| S
 ```
 
-Going right: a reader records the **version** of everything it reads.
-Going left: a source that changes marks its followers **dirty**.
+Going right: a source that changes marks its listeners dirty.
+Going left: a reader records the version of everything it reads.
 
 Dirty means "come and check", not "recompute". The reader wakes up, compares each recorded version
-against the current one, and only runs its body if something actually moved. That is what makes an
-unchanged result stop propagation dead.
+against the current one, and only runs its body if something actually moved. A memo only takes a
+new version when its result changes, which is what makes an unchanged result stop propagation dead.
 
 Here is a write, end to end:
 
 ```mermaid
 flowchart TD
-    W["count(1)"] --> B{"inside a batch?"}
-    B -->|no| M["mark the leader dirty"]
-    B -->|yes| Q["apply the value now,<br>hold the dirt until flush"]
-    Q --> FL["end of batch"]
-    FL --> M
-    M --> P["walk the followers"]
-    P --> MEMO["<b>memo</b>: mark its own leader dirty<br><i>nothing recomputes yet</i>"]
-    P --> EFF["<b>effect</b>: put it on the schedule"]
+    W["count(1)"] --> EQ{"equal to the<br>current value?"}
+    EQ -->|yes| NOP["nothing happens"]
+    EQ -->|no| V["store the value,<br>take a new version"]
+    V --> RD{"read since the<br>last notification?"}
+    RD -->|no| DONE["stop: nobody is waiting on it"]
+    RD -->|yes| P["walk the listeners"]
+    P --> MEMO["<b>memo</b>: mark itself stale,<br>notify its own listeners<br><i>nothing recomputes yet</i>"]
+    P --> EFF["<b>effect</b>: run now, or queue it<br>if inside a batch or another effect"]
     MEMO --> P
-    EFF --> RUN["flush runs it"]
-    RUN --> CHK{"did any recorded<br>version move?"}
+    EFF --> CHK{"did any recorded<br>version move?"}
     CHK -->|no| SKIP["skip: the body never runs"]
     CHK -->|yes| GO["run the body,<br>re-track dependencies"]
 ```
@@ -252,69 +282,29 @@ flowchart TD
 
 | | |
 | --- | --- |
-| `EqualComparer` | Holds a value and decides what counts as a change |
-| `VersionLeader` | A readable source: a version, a dirty flag, and its followers |
-| `VersionFollower` | The dirty inbox belonging to one reader |
-| `ConnectorManager` | A reader's dependency slots, matched by read order so a stable dependency set costs one identity check per read |
-| `Schedulable` | Whether a signal has a pending write, or an effect a pending run |
-| `globalScheduler` | Opens batches, drains the queues, and stops a runaway cycle from poisoning the process |
+| `SignalValue` | A writable source: a value, a version, and its listeners |
+| `MemoValue` | A lazy derived source; recomputes on read when stale, and bumps its version only when the result changes |
+| `EffectAction` | A side effect; owns whatever is created while it runs, and holds the cleanup it returned |
+| `Runnable` | What memos and effects share: the dependency slots, the version check, and re-entrancy protection |
+| `globalContext` | The active reader and owner, dependency tracking, and the queue of pending effects |
+| `BatchScope` | Nested batch scopes; the outermost one closing is what flushes the effect queue |
+| `ErrorScope` | Collects errors across a propagation and rethrows them once it is over |
 
 Dependencies are tracked by **position**. A reader's slots are filled in read order, so a graph
 whose shape does not change reuses them in place, with no allocation and no bookkeeping. When the
-shape does change, only the slots that disagree get rewired, and reading the same source twice
-folds into the slot the first read already claimed.
+shape does change, only the slots that disagree get rewired, and reading the same source twice in
+one run is folded into the slot the first read already claimed.
 
----
-
-## Performance
-
-Measured against three mature reactive cores on the same graphs. Run it yourself:
-
-```bash
-pnpm bench
-```
-
-Node v25.8.2, three runs of 15 samples per cell, median of the three medians, milliseconds.
-**Lower is better.**
-
-| Scenario | **@lenic/signal** | @preact/signals-core | alien-signals | @vue/reactivity |
-| --- | --- | --- | --- | --- |
-| deep chain (depth 50, 5k writes) | 25.0 | 11.2 | **4.8** | 14.4 |
-| fan-out (1 source, 100 memos) | 18.2 | 8.2 | **4.0** | 10.7 |
-| diamond (width 20, 5k writes) | 11.4 | 9.0 | **4.3** | 11.2 |
-| dynamic deps (10k branch switches) | 5.3 | 2.4 | **1.6** | 3.6 |
-| wide sources (100 signals, 10k writes) | 18.6 | 12.9 | **11.0** | 16.3 |
-| cached reads (1M reads) | **5.3** | 5.8 | 5.6 | 8.5 |
-| creation (20k signal+memo pairs) | 12.8 | 1.5 | **1.1** | 2.1 |
-| effect create+dispose (20k) | 9.1 | 1.5 | **0.8** | 2.0 |
-| batched writes (2k × 10) | 5.0 | 1.2 | **0.8** | n/a |
-
-**Where it stands.** Repeated reads of an unchanged memo are the fastest of the four. Propagation
-through a wide dependency set is within 1.7×; a diamond is 2.7× and a dynamic-dependency switch
-3.3×. Deep chains and fan-out sit at around 5×. Construction is the weak spot at roughly 12×: a
-signal costs 472 bytes here against 88 to 160 elsewhere, because value, versioning and scheduling
-are three separate collaborators rather than fields on one object.
-
-That split is deliberate, and it is what made the conformance run reachable. Watching those roles
-independently is how a dozen silent bugs in this engine turned up. Closing the last of the
-construction gap means collapsing them, and that trade has not looked worth it: construction
-happens once per signal, propagation happens forever.
-
-**Caveats.** These are synthetic graphs on an idle machine. The ranking moves with graph shape,
-update frequency and payload size. Numbers are comparable only within one run on one machine.
-`pnpm bench` verifies that every library agrees on behaviour before it times anything, and
-compares a checksum per scenario. Without that, a library quietly doing less work would look like
-the fastest one here. Individual cells swing by a third between runs - diamond, batched writes and
-effect create+dispose most of all - which is why the table above is a median across three separate
-runs rather than one.
+Batched writes are snapshotted. When the batch ends, a signal whose value is back to what it was
+before the batch also gets its old version back, so readers find nothing changed and skip.
 
 ---
 
 ## Status
 
-`0.x`, and the internals still move between minor versions. The four public functions are stable;
-the exported machinery (`VersionLeader`, `ConnectorManager`, `globalScheduler` and friends) is
-there for building on top, and does change.
+`0.x`, and the internals still move between minor versions. The functions documented above are
+stable; the exported machinery (`SignalValue`, `MemoValue`, `EffectAction`, `globalContext`,
+`BatchScope` and friends) is there for building on top, and does change.
 
 ---
 
