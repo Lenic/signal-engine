@@ -34,9 +34,7 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
   }
 
   markDirty(): void {
-    if (this._isSelfRunning) {
-      this._needsToPushToQueue = true;
-    } else if (!globalContext.isEffectRunning && !BatchScope.isBatching) {
+    if (!globalContext.isEffectRunning && !BatchScope.isBatching) {
       this.run();
     } else {
       this.pushToQueue();
@@ -62,7 +60,14 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
 
       if (this._needsToPushToQueue) {
         this._needsToPushToQueue = false;
-        this.pushToQueue();
+
+        // fire consumeTail method of the global-context file.
+        const ctx = BatchScope.begin();
+        try {
+          this.pushToQueue();
+        } finally {
+          BatchScope.end(ctx);
+        }
       }
     }
   }

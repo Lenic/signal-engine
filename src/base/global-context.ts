@@ -77,6 +77,8 @@ function consumeTail() {
     let iterationLevel = 0;
     while (globalContext.effectList.size) {
       if (iterationLevel > MAX_ITERATION_DEPTH) {
+        while (globalContext.effectList.head) globalContext.effectList.head.removeSelf();
+
         throw new Error('[ConsumeTail]: more than the max iteration.');
       }
       iterationLevel += 1;
