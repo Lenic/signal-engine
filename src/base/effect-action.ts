@@ -32,13 +32,12 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
   }
 
   markDirty(): void {
-    if (!globalContext.isEffectRunning && !BatchScope.isBatching) {
+    if (this._isSelfRunning) {
+      this.pushToQueue();
+    } else if (!globalContext.isEffectRunning && !BatchScope.isBatching) {
       this.run();
     } else {
-      if (this._queueNode) return;
-
-      this._queueNode = globalContext.effectList.append(this);
-      this._queueNode.onBeforeClear = EffectAction.releaseQueueNode;
+      this.pushToQueue();
     }
   }
 
@@ -69,6 +68,13 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
 
     this.releaseChildren();
     this._children = undefined;
+  }
+
+  private pushToQueue() {
+    if (this._queueNode) return;
+
+    this._queueNode = globalContext.effectList.append(this);
+    this._queueNode.onBeforeClear = EffectAction.releaseQueueNode;
   }
 
   private releaseChildren() {

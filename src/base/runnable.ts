@@ -8,10 +8,11 @@ import { globalContext } from './global-context';
 
 export abstract class Runnable<T extends Runnable<T>> extends Disposable implements IRunnable {
   private _runId: number;
-  private _isSelfRunning: boolean;
   private _isInitialized: boolean;
   private _ownNode?: ILinkedNode<IDisposable>;
   private _connectors: ILinkedList<ISnapshot>;
+
+  protected _isSelfRunning: boolean;
 
   currentConnect?: ILinkedNode<ISnapshot> | null;
 

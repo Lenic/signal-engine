@@ -88,13 +88,13 @@ function consumeTail() {
 
       while (list.size) {
         while (list.head) {
-          const node = list.head;
           try {
-            node.value.run();
+            const instance = list.head.value;
+            list.head.removeSelf();
+            instance.run();
           } catch (e) {
             errorContext.push(e);
           }
-          node.removeSelf();
         }
       }
     }

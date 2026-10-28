@@ -663,4 +663,43 @@ describe('TestSuite', () => {
     expect(c.value).toBe(3);
     expect(s.value).toBe(3);
   });
+
+  test('@212', () => {
+    const s = new SignalValue(0);
+    const c = new MemoValue(() => s.value);
+
+    new EffectAction(() => {
+      if (c.value > 0) {
+        s.setValue(0);
+      }
+    });
+
+    s.setValue(1);
+    expect(s.value).toBe(0);
+
+    s.setValue(2);
+    expect(s.value).toBe(0);
+
+    s.setValue(3);
+    expect(s.value).toBe(0);
+  });
+
+  test('@213', () => {
+    const s = new SignalValue(1);
+    const c = new MemoValue(() => s.value);
+
+    new EffectAction(() => {
+      if (c.value > 0) {
+        s.setValue(0);
+      }
+    });
+
+    expect(s.value).toBe(0);
+
+    s.setValue(2);
+    expect(s.value).toBe(0);
+
+    s.setValue(3);
+    expect(s.value).toBe(0);
+  });
 });
