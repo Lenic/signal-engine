@@ -1,6 +1,6 @@
 import type { IDisposable, ILinkedList, ILinkedNode } from '../utils';
 
-import type { IAction, IConnectManager, IEffectAction, INamedObject } from './types';
+import type { IAction, IEffectAction, INamedObject } from './types';
 
 import { BatchScope, LinkedList } from '../utils';
 
@@ -8,10 +8,11 @@ import { globalContext } from './global-context';
 import { Runnable } from './runnable';
 import { notifyListeners } from './utils';
 
-export class EffectAction extends Runnable<EffectAction> implements IEffectAction, IConnectManager {
+export class EffectAction extends Runnable<EffectAction> implements IEffectAction {
   private _name?: string;
   private _action: IAction;
   private _children?: ILinkedList<IDisposable>;
+  private _queueNode?: ILinkedNode<IEffectAction>;
 
   constructor(action: IAction, options?: INamedObject) {
     super();
@@ -34,10 +35,10 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
     if (!globalContext.isEffectRunning && !BatchScope.isBatching) {
       this.run();
     } else {
-      if (this.queueNode) return;
+      if (this._queueNode) return;
 
-      this.queueNode = globalContext.effectList.append(this);
-      this.queueNode.onBeforeClear = EffectAction.releaseQueueNode;
+      this._queueNode = globalContext.effectList.append(this);
+      this._queueNode.onBeforeClear = EffectAction.releaseQueueNode;
     }
   }
 
@@ -63,6 +64,9 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
     this._name = undefined;
     this._action = undefined as unknown as IAction;
 
+    this._queueNode?.removeSelf();
+    this._queueNode = undefined;
+
     this.releaseChildren();
     this._children = undefined;
   }
@@ -76,7 +80,7 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
   }
 
   private static releaseQueueNode(node: ILinkedNode<IEffectAction>): void {
-    (node.value as EffectAction).queueNode = undefined;
+    (node.value as EffectAction)._queueNode = undefined;
   }
 
   private static releaseItem(disposable: IDisposable): void {

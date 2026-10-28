@@ -47,11 +47,13 @@ export interface ISnapshot {
 }
 
 /** @internal */
-export interface IConnectManager {
+export interface IConnectManager extends IDisposable {
   readonly runId: number;
   readonly connectors: ILinkedList<ISnapshot>;
   currentConnect?: ILinkedNode<ISnapshot> | null;
 }
+
+export interface IRunnable extends IDirtyMarkable, IConnectManager, IDisposable, INamedObject {}
 
 export interface IConnectable extends IVersioned, IChangeListenerSource<IDirtyMarkable> {
   lastRunId?: number;
@@ -62,11 +64,10 @@ export interface IEffectOwner {
   adopt(disposable: IDisposable): ILinkedNode<IDisposable>;
 }
 
-export interface IEffectAction extends INamedObject, IDisposable, IDirtyMarkable, IEffectOwner {
+export interface IEffectAction extends IRunnable, IEffectOwner {
   run(): void;
 }
 
-export interface IMemoValue<T>
-  extends INamedObject, IDisposable, IDirtyMarkable, IVersioned, IChangeListenerSource<IDirtyMarkable> {
+export interface IMemoValue<T> extends IRunnable, IVersioned, IChangeListenerSource<IDirtyMarkable> {
   readonly value: T;
 }

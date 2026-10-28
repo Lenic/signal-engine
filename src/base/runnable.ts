@@ -1,19 +1,18 @@
 import type { IDisposable, ILinkedList, ILinkedNode } from '../utils';
 
-import type { IAction, IConnectManager, IDirtyMarkable, IEffectAction, ISnapshot } from './types';
+import type { IAction, IRunnable, ISnapshot } from './types';
 
 import { Disposable, ErrorScope, LinkedList } from '../utils';
 
 import { globalContext } from './global-context';
 
-export abstract class Runnable<T extends Runnable<T>> extends Disposable implements IDirtyMarkable, IConnectManager {
+export abstract class Runnable<T extends Runnable<T>> extends Disposable implements IRunnable {
   private _runId: number;
   private _isSelfRunning: boolean;
   private _isInitialized: boolean;
   private _ownNode?: ILinkedNode<IDisposable>;
   private _connectors: ILinkedList<ISnapshot>;
 
-  queueNode?: ILinkedNode<IEffectAction>;
   currentConnect?: ILinkedNode<ISnapshot> | null;
 
   constructor() {
@@ -86,9 +85,6 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
 
     this._isInitialized = false;
     this._isSelfRunning = false;
-
-    this.queueNode?.removeSelf();
-    this.queueNode = undefined;
 
     this._ownNode?.removeSelf();
     this._ownNode = undefined;

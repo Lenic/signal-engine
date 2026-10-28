@@ -1,13 +1,6 @@
-import type { IDisposable, ILinkedList } from '../utils';
+import type { ILinkedList } from '../utils';
 
-import type {
-  IBatchSnapshot,
-  IConnectable,
-  IConnectManager,
-  IDirtyMarkable,
-  IEffectAction,
-  IEffectOwner,
-} from './types';
+import type { IBatchSnapshot, IConnectable, IEffectAction, IEffectOwner, IRunnable } from './types';
 
 import { BatchScope, ErrorScope, LinkedList } from '../utils';
 
@@ -22,7 +15,7 @@ export const globalContext = {
   activeOwner: undefined as IEffectOwner | undefined,
   effectList: new LinkedList<IEffectAction>() as ILinkedList<IEffectAction>,
   batchSnapshots: new LinkedList<IBatchSnapshot>() as ILinkedList<IBatchSnapshot>,
-  activeEffect: undefined as (IDirtyMarkable & IConnectManager & IDisposable) | undefined,
+  activeEffect: undefined as IRunnable | undefined,
   track(source: IConnectable): void {
     if (!this.activeEffect) return;
     if (this.activeEffect.isDisposed) return;
