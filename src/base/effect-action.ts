@@ -11,6 +11,7 @@ import { notifyListeners } from './utils';
 export class EffectAction extends Runnable<EffectAction> implements IEffectAction {
   private _name?: string;
   private _action: IAction;
+  private _needsToPushToQueue: boolean;
   private _children?: ILinkedList<IDisposable>;
   private _queueNode?: ILinkedNode<IEffectAction>;
 
@@ -19,6 +20,7 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
 
     this._action = action;
     this._name = options?.name;
+    this._needsToPushToQueue = false;
 
     this.run();
   }
@@ -33,7 +35,7 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
 
   markDirty(): void {
     if (this._isSelfRunning) {
-      this.pushToQueue();
+      this._needsToPushToQueue = true;
     } else if (!globalContext.isEffectRunning && !BatchScope.isBatching) {
       this.run();
     } else {
@@ -44,6 +46,11 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
   run() {
     this.assertNotDisposed();
 
+    if (this._isSelfRunning) {
+      this._needsToPushToQueue = true;
+      return;
+    }
+
     this.releaseChildren();
 
     const previousActiveOwner = globalContext.activeOwner;
@@ -52,6 +59,11 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
       this.execute(EffectAction.runAction, undefined);
     } finally {
       globalContext.activeOwner = previousActiveOwner;
+
+      if (this._needsToPushToQueue) {
+        this._needsToPushToQueue = false;
+        this.pushToQueue();
+      }
     }
   }
 
