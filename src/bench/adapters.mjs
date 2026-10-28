@@ -1,8 +1,8 @@
-import * as alien from 'alien-signals';
 import * as preact from '@preact/signals-core';
 import * as vue from '@vue/reactivity';
+import * as alien from 'alien-signals';
 
-import * as lenic from '../../dist/index.mjs';
+import * as lenic from '../../dist/index.js';
 
 /**
  * Every library is driven through the same shape, so a scenario is written once and each
@@ -23,7 +23,14 @@ export const adapters = [
       return { read: () => c() };
     },
     effect: (fn) => lenic.effect(fn),
-    batch: (fn) => lenic.batch(fn),
+    batch: (fn) => {
+      const context = lenic.beginBatch();
+      try {
+        fn();
+      } finally {
+        lenic.endBatch(context);
+      }
+    },
   },
   {
     name: '@preact/signals-core',

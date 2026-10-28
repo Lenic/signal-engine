@@ -12,16 +12,9 @@
     "declaration": true,
     "noImplicitAny": false,
     "esModuleInterop": true,
-    "types": [
-      "vitest"
-    ]
+    "stripInternal": true,
+    "types": ["vitest"]
   },
-  "include": [
-    "src/**/*"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "tsdown.config.ts"
-  ]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "tsdown.config.ts"]
 }

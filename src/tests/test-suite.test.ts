@@ -1,24 +1,29 @@
+import type { ReactiveFramework } from 'reactive-framework-test-suite';
+
+import { testSuite, SkipTest, setExpect } from 'reactive-framework-test-suite';
 import { describe, expect, test } from 'vitest';
-import { testSuite, SkipTest, setExpect, type ReactiveFramework } from 'reactive-framework-test-suite';
-import { signal } from '../signal';
-import { effect } from '../effect';
-import { memo } from '../memo';
-import { globalScheduler } from '../core';
+
+import { EffectAction } from '../base/effect-action';
+import { globalContext } from '../base/global-context';
+import { MemoValue } from '../base/memo-value';
+import { SignalValue } from '../base/signal-value';
+import { BatchScope } from '../utils';
 
 const framework: ReactiveFramework = {
   signal(initialValue) {
-    const s = signal(initialValue);
+    const s = new SignalValue(initialValue);
     return {
-      read: () => s(),
-      write: (v) => s(v),
+      read: () => s.value,
+      write: (v) => s.setValue(v),
     };
   },
   computed(fn) {
-    const c = memo(fn);
-    return { read: () => c() };
+    const c = new MemoValue(fn);
+    return { read: () => c.value };
   },
   effect(fn) {
-    return effect(fn);
+    const instance = new EffectAction(fn);
+    return () => instance.dispose();
   },
   run(fn) {
     fn();
@@ -26,18 +31,16 @@ const framework: ReactiveFramework = {
   batch(fn) {
     // `#176 batch return value` checks that the callback's return value is forwarded.
     let result: unknown;
-    globalScheduler.batch(() => void (result = fn()));
+    const ctx = BatchScope.begin();
+    try {
+      result = fn();
+    } finally {
+      BatchScope.end(ctx);
+    }
     return result as void;
   },
   untracked(fn) {
-    // Reads are tracked by whichever manager is active, so clearing it suppresses tracking.
-    const previous = globalScheduler.connectorManager;
-    globalScheduler.connectorManager = undefined;
-    try {
-      return fn();
-    } finally {
-      globalScheduler.connectorManager = previous;
-    }
+    return globalContext.untracked(fn);
   },
 };
 

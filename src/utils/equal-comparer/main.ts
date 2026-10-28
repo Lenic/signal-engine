@@ -1,7 +1,8 @@
-import { Disposable } from '../disposable';
-import { IEqualComparer } from './types';
+import type { IEqualComparer } from './types';
 
-function defaultComparer<T>(x: T, y: T): boolean {
+import { Disposable } from '../disposable';
+
+export function defaultEqualComparer<T>(x: T, y: T): boolean {
   return x === y;
 }
 
@@ -17,7 +18,7 @@ export class EqualComparer<T> extends Disposable implements IEqualComparer<T> {
 
     this._name = name;
     this._value = DEFAULT_VALUE;
-    this._comparer = comparer ?? defaultComparer;
+    this._comparer = comparer ?? defaultEqualComparer;
   }
 
   get name(): string | undefined {
@@ -31,7 +32,14 @@ export class EqualComparer<T> extends Disposable implements IEqualComparer<T> {
     return this._value;
   }
 
-  setValue(candidate: T): boolean {
+  setValue(candidate: T, force: boolean = false): boolean {
+    this.assertNotDisposed();
+
+    if (force) {
+      this._value = candidate;
+      return true;
+    }
+
     if (this._value !== DEFAULT_VALUE) {
       if (this._value === candidate) return false;
       if (this._comparer(this._value, candidate)) return false;
@@ -41,11 +49,13 @@ export class EqualComparer<T> extends Disposable implements IEqualComparer<T> {
     return true;
   }
 
-  forceValue(candidate: T): void {
-    this._value = candidate;
-  }
+  dispose() {
+    if (this.isDisposed) return;
 
-  isEqual(a: T, b: T): boolean {
-    return this._comparer(a, b);
+    super.dispose();
+
+    this._name = undefined;
+    this._value = undefined as unknown as T;
+    this._comparer = undefined as unknown as (x: T, y: T) => boolean;
   }
 }
