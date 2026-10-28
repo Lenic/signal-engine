@@ -46,7 +46,6 @@ export interface ISnapshot {
   node: ILinkedNode<IDirtyMarkable>;
 }
 
-/** @internal */
 export interface IConnectManager extends IDisposable {
   readonly runId: number;
   readonly connectors: ILinkedList<ISnapshot>;

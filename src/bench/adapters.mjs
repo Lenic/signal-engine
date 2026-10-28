@@ -23,7 +23,14 @@ export const adapters = [
       return { read: () => c() };
     },
     effect: (fn) => lenic.effect(fn),
-    batch: (fn) => lenic.batch(fn),
+    batch: (fn) => {
+      const context = lenic.beginBatch();
+      try {
+        fn();
+      } finally {
+        lenic.endBatch(context);
+      }
+    },
   },
   {
     name: '@preact/signals-core',
