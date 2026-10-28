@@ -63,6 +63,22 @@ export const globalContext = {
       ErrorScope.end(ctx);
     }
   },
+  untracked<T>(fn: () => T) {
+    // Reads are tracked by whichever manager is active, so clearing it suppresses tracking.
+    const previousActiveEffect = this.activeEffect;
+    const previousEffectRunning = this.isEffectRunning;
+    const previousActiveOwner = this.activeOwner;
+    this.activeEffect = undefined;
+    this.isEffectRunning = false;
+    this.activeOwner = undefined;
+    try {
+      return fn();
+    } finally {
+      this.activeEffect = previousActiveEffect;
+      this.isEffectRunning = previousEffectRunning;
+      this.activeOwner = previousActiveOwner;
+    }
+  },
 };
 
 let isConsuming = false;

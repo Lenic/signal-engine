@@ -10,12 +10,13 @@ import { notifyListeners } from './utils';
 
 export class EffectAction extends Runnable<EffectAction> implements IEffectAction {
   private _name?: string;
-  private _action: IAction;
+  private _customCleanup?: IAction;
   private _needsToPushToQueue: boolean;
+  private _action: IAction<[], void | IAction>;
   private _children?: ILinkedList<IDisposable>;
   private _queueNode?: ILinkedNode<IEffectAction>;
 
-  constructor(action: IAction, options?: INamedObject) {
+  constructor(action: IAction<[], void | IAction>, options?: INamedObject) {
     super();
 
     this._action = action;
@@ -85,6 +86,8 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
 
     this.releaseChildren();
     this._children = undefined;
+
+    this.runCustomCleanup();
   }
 
   private pushToQueue() {
@@ -98,8 +101,25 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
     notifyListeners(this._children, EffectAction.releaseItem, true);
   }
 
+  private runCustomCleanup() {
+    if (!this._customCleanup) return;
+
+    try {
+      globalContext.untracked(this._customCleanup);
+    } finally {
+      this._customCleanup = undefined;
+    }
+  }
+
   private static runAction(ctx: EffectAction) {
-    ctx._action();
+    ctx.runCustomCleanup();
+
+    if (ctx.isDisposed) return;
+
+    const result = ctx._action();
+    if (typeof result === 'function') {
+      ctx._customCleanup = result;
+    }
   }
 
   private static releaseQueueNode(node: ILinkedNode<IEffectAction>): void {

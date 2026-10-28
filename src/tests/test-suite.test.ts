@@ -40,20 +40,7 @@ const framework: ReactiveFramework = {
     return result as void;
   },
   untracked(fn) {
-    // Reads are tracked by whichever manager is active, so clearing it suppresses tracking.
-    const previousActiveEffect = globalContext.activeEffect;
-    const previousEffectRunning = globalContext.isEffectRunning;
-    const previousActiveOwner = globalContext.activeOwner;
-    globalContext.activeEffect = undefined;
-    globalContext.isEffectRunning = false;
-    globalContext.activeOwner = undefined;
-    try {
-      return fn();
-    } finally {
-      globalContext.activeEffect = previousActiveEffect;
-      globalContext.isEffectRunning = previousEffectRunning;
-      globalContext.activeOwner = previousActiveOwner;
-    }
+    return globalContext.untracked(fn);
   },
 };
 
