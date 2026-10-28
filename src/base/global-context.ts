@@ -2,12 +2,11 @@ import type { IDisposable, ILinkedList } from '../utils';
 
 import type {
   IBatchSnapshot,
-  IChangeListenerSource,
+  IConnectable,
   IConnectManager,
   IDirtyMarkable,
   IEffectAction,
   IEffectOwner,
-  IVersioned,
 } from './types';
 
 import { BatchScope, ErrorScope, LinkedList } from '../utils';
@@ -24,15 +23,17 @@ export const globalContext = {
   effectList: new LinkedList<IEffectAction>() as ILinkedList<IEffectAction>,
   batchSnapshots: new LinkedList<IBatchSnapshot>() as ILinkedList<IBatchSnapshot>,
   activeEffect: undefined as (IDirtyMarkable & IConnectManager & IDisposable) | undefined,
-  track(source: IVersioned & IChangeListenerSource<IDirtyMarkable>): void {
+  track(source: IConnectable): void {
     if (!this.activeEffect) return;
     if (this.activeEffect.isDisposed) return;
 
     const ctx = ErrorScope.begin();
+    const effect = this.activeEffect;
     try {
-      const effect = this.activeEffect;
       const sourceVersion = source.version;
       if (!effect.currentConnect) {
+        if (source.lastInstance === effect && source.lastRunId === effect.runId) return;
+
         const connector = effect.connectors.append({
           instance: source,
           version: sourceVersion,
@@ -45,17 +46,27 @@ export const globalContext = {
           value.version = sourceVersion;
         } else {
           effect.currentConnect.value.node.removeSelf();
-          effect.currentConnect.value = {
-            instance: source,
-            version: sourceVersion,
-            node: source.addChangeListener(effect),
-          };
+          if (source.lastInstance === effect && source.lastRunId == effect.runId) {
+            const deprecated = effect.currentConnect;
+            effect.currentConnect = effect.currentConnect.next;
+            deprecated.removeSelf();
+            return;
+          } else {
+            effect.currentConnect.value = {
+              instance: source,
+              version: sourceVersion,
+              node: source.addChangeListener(effect),
+            };
+          }
         }
         effect.currentConnect = effect.currentConnect.next;
       }
     } catch (e) {
       ctx.push(e);
     } finally {
+      source.lastInstance = effect;
+      source.lastRunId = effect.runId;
+
       ErrorScope.end(ctx);
     }
   },

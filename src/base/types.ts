@@ -48,8 +48,14 @@ export interface ISnapshot {
 
 /** @internal */
 export interface IConnectManager {
-  connectors: ILinkedList<ISnapshot>;
+  readonly runId: number;
+  readonly connectors: ILinkedList<ISnapshot>;
   currentConnect?: ILinkedNode<ISnapshot> | null;
+}
+
+export interface IConnectable extends IVersioned, IChangeListenerSource<IDirtyMarkable> {
+  lastRunId?: number;
+  lastInstance?: IConnectManager;
 }
 
 export interface IEffectOwner {

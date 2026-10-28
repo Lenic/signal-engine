@@ -5,8 +5,8 @@ import { MemoValue } from '../base/memo-value';
 import { SignalValue } from '../base/signal-value';
 import { BatchScope } from '../utils';
 
-describe('SignalValue', () => {
-  test('basic read and write', () => {
+describe('1. Signal: read, write and equality', () => {
+  test('1.1 basic read and write', () => {
     const s = new SignalValue(1);
     expect(s.value).toBe(1);
 
@@ -16,25 +16,8 @@ describe('SignalValue', () => {
     s.setValue(3);
     expect(s.value).toBe(3);
   });
-});
 
-describe('SignalValue & EffectAction', () => {
-  test('run when the dependency has been changed', () => {
-    const count = new SignalValue(1);
-    let runCount = 0;
-
-    new EffectAction(() => {
-      runCount++;
-      count.value.toString();
-    });
-
-    expect(runCount).toBe(1);
-
-    count.setValue(2);
-    expect(runCount).toBe(2);
-  });
-
-  test('the same object has not changed with custom comparer', () => {
+  test('1.2 the same object has not changed with custom comparer', () => {
     const initialObj = { value: 1, label: 'default' };
     const s = new SignalValue(initialObj, { comparer: (x, y) => x.label === y.label });
     let runCount = 0;
@@ -52,7 +35,7 @@ describe('SignalValue & EffectAction', () => {
     expect(s.value.value).toBe(1);
   });
 
-  test('object references and mutations', () => {
+  test('1.3 object references and mutations', () => {
     const initialObj = { value: 1 };
     const s = new SignalValue(initialObj);
     let runCount = 0;
@@ -77,23 +60,42 @@ describe('SignalValue & EffectAction', () => {
     expect(s.value.value).toBe(3);
   });
 
-  test('dispose stops reactivity and cleans up', () => {
-    const s = new SignalValue(1);
-    const list: number[] = [];
+  // test('the same object has not changed with custom comparer', () => {
+  //   const initialObj = { value: 1, label: 'default' };
+  //   const s = new SignalValue(initialObj);
+  //   let runCount = 0;
+  //
+  //   new EffectAction(() => {
+  //     runCount++;
+  //     void s.value;
+  //   });
+  //
+  //   expect(runCount).toBe(1);
+  //
+  //   // set a new object but get the equal result by the custom comparer
+  //   s.setValue({ value: 2, label: 'default' });
+  //   expect(runCount).toBe(1);
+  //   expect(s.value.value).toBe(1);
+  // });
+});
 
-    const ea = new EffectAction(() => {
-      list.push(s.value);
+describe('2. Effect: re-runs when what it read changes', () => {
+  test('2.1 run when the dependency has been changed', () => {
+    const count = new SignalValue(1);
+    let runCount = 0;
+
+    new EffectAction(() => {
+      runCount++;
+      count.value.toString();
     });
 
-    expect(list).toEqual([1]);
+    expect(runCount).toBe(1);
 
-    ea.dispose();
-
-    s.setValue(2);
-    expect(list).toEqual([1]);
+    count.setValue(2);
+    expect(runCount).toBe(2);
   });
 
-  test('dynamic dependency branch tracking', () => {
+  test('2.2 only the dependencies of the current branch trigger a re-run', () => {
     const a = new SignalValue(1);
     const b = new SignalValue(10);
     const flag = new SignalValue(true);
@@ -137,47 +139,10 @@ describe('SignalValue & EffectAction', () => {
     expect(runCount).toBe(4);
     expect(list).toEqual([1, 2, 20, 30]);
   });
-
-  test('nested effects disposal behavior', () => {
-    const a = new SignalValue(1);
-    let parentRunCount = 0;
-    let childRunCount = 0;
-    const list: number[] = [];
-
-    const parent = new EffectAction(() => {
-      parentRunCount++;
-      void a.value;
-
-      new EffectAction(() => {
-        childRunCount++;
-        list.push(a.value);
-      });
-    });
-
-    expect(parentRunCount).toBe(1);
-    expect(childRunCount).toBe(1);
-    expect(list).toEqual([1]);
-
-    // Trigger parent re-run.
-    // The previous child effect should be auto-disposed when the parent re-runs.
-    a.setValue(2);
-    expect(parentRunCount).toBe(2);
-    // Since parent re-ran, it created a new child effect.
-    // The old child effect is disposed (so it won't run). The new child runs.
-    expect(childRunCount).toBe(2);
-    expect(list).toEqual([1, 2]);
-
-    // Now if we dispose the parent, all nested child effects should also be disposed.
-    parent.dispose();
-    a.setValue(3);
-    expect(parentRunCount).toBe(2);
-    expect(childRunCount).toBe(2);
-    expect(list).toEqual([1, 2]);
-  });
 });
 
-describe('SignalValue & MemoValue', () => {
-  test('baseic read and write', () => {
+describe('3. Memo: computed lazily and cached', () => {
+  test('3.1 computes on the first read and recomputes after a change', () => {
     const s = new SignalValue(1);
     let runCount = 0;
     const m = new MemoValue(() => {
@@ -195,7 +160,7 @@ describe('SignalValue & MemoValue', () => {
     expect(runCount).toBe(2);
   });
 
-  test('lazy evaluation and caching', () => {
+  test('3.2 lazy evaluation and caching', () => {
     const a = new SignalValue(1);
     let runCount = 0;
     const m = new MemoValue(() => {
@@ -225,8 +190,10 @@ describe('SignalValue & MemoValue', () => {
     expect(m.value).toBe(20);
     expect(runCount).toBe(2);
   });
+});
 
-  test('nested memos (chained dependencies)', () => {
+describe('4. Propagation: memo chains and diamonds', () => {
+  test('4.1 nested memos (chained dependencies)', () => {
     const a = new SignalValue(2);
     let bRunCount = 0;
     let cRunCount = 0;
@@ -258,7 +225,7 @@ describe('SignalValue & MemoValue', () => {
     expect(cRunCount).toBe(2);
   });
 
-  test('diamond dependency (glitch-free verification)', () => {
+  test('4.2 diamond dependency (glitch-free verification)', () => {
     //   A
     //  / \
     // B   C
@@ -312,8 +279,255 @@ describe('SignalValue & MemoValue', () => {
     expect(dCount).toBe(2);
     expect(dList).toEqual([111, 212]);
   });
+});
 
-  test('memo disposal', () => {
+describe('5. Dependency tracking: the same source read more than once', () => {
+  const sourcesOf = (target: { connectors: EffectAction['connectors'] }) => {
+    const sources: unknown[] = [];
+    for (let node = target.connectors.head; node; node = node.next) {
+      sources.push(node.value.instance);
+    }
+    return sources;
+  };
+
+  test('5.1 reading the same source repeatedly in one run subscribes only once', () => {
+    const s = new SignalValue(1);
+    let runCount = 0;
+
+    const e = new EffectAction(() => {
+      runCount++;
+      void (s.value + s.value + s.value);
+    });
+
+    expect(runCount).toBe(1);
+    expect(sourcesOf(e)).toEqual([s]);
+    expect(s.listeners?.size).toBe(1);
+
+    // a duplicated listener would not break the run count, so the shape must be checked as well
+    s.setValue(2);
+    expect(runCount).toBe(2);
+    expect(sourcesOf(e)).toEqual([s]);
+    expect(s.listeners?.size).toBe(1);
+  });
+
+  test('5.2 interleaved reads (a, b, a) keep the first position of each source', () => {
+    const a = new SignalValue(1);
+    const b = new SignalValue(10);
+    const seen: number[] = [];
+
+    const e = new EffectAction(() => {
+      seen.push(a.value + b.value + a.value);
+    });
+
+    expect(seen).toEqual([12]);
+    expect(sourcesOf(e)).toEqual([a, b]);
+    expect(a.listeners?.size).toBe(1);
+    expect(b.listeners?.size).toBe(1);
+
+    a.setValue(2);
+    expect(seen).toEqual([12, 14]);
+    expect(sourcesOf(e)).toEqual([a, b]);
+    expect(a.listeners?.size).toBe(1);
+    expect(b.listeners?.size).toBe(1);
+
+    b.setValue(20);
+    expect(seen).toEqual([12, 14, 24]);
+    expect(sourcesOf(e)).toEqual([a, b]);
+  });
+
+  test('5.3 a skipped duplicate must not advance the reused connector', () => {
+    const a = new SignalValue(1);
+    const b = new SignalValue(10);
+    const c = new SignalValue(100);
+    let runCount = 0;
+
+    // if a skipped read moved `currentConnect` forward, the second run would overwrite `b` with `c`
+    // or drop `c` in the tail cleanup
+    const e = new EffectAction(() => {
+      runCount++;
+      void (a.value + a.value + b.value + c.value);
+    });
+
+    a.setValue(2);
+    expect(runCount).toBe(2);
+    expect(sourcesOf(e)).toEqual([a, b, c]);
+
+    b.setValue(20);
+    expect(runCount).toBe(3);
+
+    c.setValue(200);
+    expect(runCount).toBe(4);
+    expect(sourcesOf(e)).toEqual([a, b, c]);
+  });
+
+  test('5.4 dedupe stays correct when the dependency order changes between runs', () => {
+    const a = new SignalValue(1);
+    const b = new SignalValue(10);
+    const flag = new SignalValue(true);
+    let runCount = 0;
+
+    const e = new EffectAction(() => {
+      runCount++;
+      if (flag.value) {
+        void (a.value + b.value + a.value);
+      } else {
+        void (b.value + a.value + b.value);
+      }
+    });
+
+    expect(sourcesOf(e)).toEqual([flag, a, b]);
+
+    flag.setValue(false);
+    expect(runCount).toBe(2);
+    expect(sourcesOf(e)).toEqual([flag, b, a]);
+    expect(a.listeners?.size).toBe(1);
+    expect(b.listeners?.size).toBe(1);
+
+    a.setValue(2);
+    expect(runCount).toBe(3);
+
+    b.setValue(20);
+    expect(runCount).toBe(4);
+    expect(sourcesOf(e)).toEqual([flag, b, a]);
+  });
+
+  test('5.5 a new run tracks the latest version again instead of reusing the previous run stamp', () => {
+    const s = new SignalValue(1);
+    let runCount = 0;
+
+    new EffectAction(() => {
+      runCount++;
+      void (s.value + s.value);
+    });
+
+    s.setValue(2);
+    expect(runCount).toBe(2);
+
+    // a stale version left from the first run would make every later run look changed (or unchanged)
+    s.setValue(3);
+    expect(runCount).toBe(3);
+
+    s.setValue(3);
+    expect(runCount).toBe(3);
+  });
+
+  test('5.6 different effects reading the same source are each subscribed', () => {
+    const s = new SignalValue(1);
+    let countA = 0;
+    let countB = 0;
+
+    new EffectAction(() => {
+      countA++;
+      void (s.value + s.value);
+    });
+    new EffectAction(() => {
+      countB++;
+      void (s.value + s.value);
+    });
+
+    expect(s.listeners?.size).toBe(2);
+
+    s.setValue(2);
+    expect(countA).toBe(2);
+    expect(countB).toBe(2);
+  });
+
+  test('5.7 the duplicate read keeps the version observed by the first read', () => {
+    const s = new SignalValue(1);
+    const versionBeforeWrite = s.version;
+
+    const m = new MemoValue(() => {
+      const first = s.value;
+      s.setValue(first + 1);
+      return s.value;
+    });
+
+    expect(m.value).toBe(2);
+    expect(sourcesOf(m)).toEqual([s]);
+    expect(s.listeners?.size).toBe(1);
+
+    // overwriting the snapshot with the post-write version would hide the self-invalidation
+    expect(m.connectors.head!.value.version).toBe(versionBeforeWrite);
+    expect(m.connectors.head!.value.version).not.toBe(s.version);
+  });
+
+  test('5.8 a nested run tracking the same source in between does not break the outer tracking', () => {
+    const s = new SignalValue(1);
+    const inner = new MemoValue(() => s.value * 10);
+    const seen: number[] = [];
+
+    // the outer run reads `s`, then `inner` re-tracks `s` with its own run stamp, then `s` again
+    new EffectAction(() => {
+      seen.push(s.value + inner.value + s.value);
+    });
+
+    expect(seen).toEqual([12]);
+    expect(sourcesOf(inner)).toEqual([s]);
+
+    s.setValue(2);
+    expect(seen).toEqual([12, 24]);
+
+    s.setValue(3);
+    expect(seen).toEqual([12, 24, 36]);
+    expect(sourcesOf(inner)).toEqual([s]);
+  });
+});
+
+describe('6. Dispose: stop reacting and release dependencies', () => {
+  test('6.1 a disposed effect no longer runs', () => {
+    const s = new SignalValue(1);
+    const list: number[] = [];
+
+    const ea = new EffectAction(() => {
+      list.push(s.value);
+    });
+
+    expect(list).toEqual([1]);
+
+    ea.dispose();
+
+    s.setValue(2);
+    expect(list).toEqual([1]);
+  });
+
+  test('6.2 nested effects disposal behavior', () => {
+    const a = new SignalValue(1);
+    let parentRunCount = 0;
+    let childRunCount = 0;
+    const list: number[] = [];
+
+    const parent = new EffectAction(() => {
+      parentRunCount++;
+      void a.value;
+
+      new EffectAction(() => {
+        childRunCount++;
+        list.push(a.value);
+      });
+    });
+
+    expect(parentRunCount).toBe(1);
+    expect(childRunCount).toBe(1);
+    expect(list).toEqual([1]);
+
+    // Trigger parent re-run.
+    // The previous child effect should be auto-disposed when the parent re-runs.
+    a.setValue(2);
+    expect(parentRunCount).toBe(2);
+    // Since parent re-ran, it created a new child effect.
+    // The old child effect is disposed (so it won't run). The new child runs.
+    expect(childRunCount).toBe(2);
+    expect(list).toEqual([1, 2]);
+
+    // Now if we dispose the parent, all nested child effects should also be disposed.
+    parent.dispose();
+    a.setValue(3);
+    expect(parentRunCount).toBe(2);
+    expect(childRunCount).toBe(2);
+    expect(list).toEqual([1, 2]);
+  });
+
+  test('6.3 memo disposal', () => {
     const a = new SignalValue(1);
     let runCount = 0;
     const m = new MemoValue(() => {
@@ -331,28 +545,10 @@ describe('SignalValue & MemoValue', () => {
     expect(m.value).toBe(2);
     expect(runCount).toBe(1);
   });
-
-  // test('the same object has not changed with custom comparer', () => {
-  //   const initialObj = { value: 1, label: 'default' };
-  //   const s = new SignalValue(initialObj);
-  //   let runCount = 0;
-  //
-  //   new EffectAction(() => {
-  //     runCount++;
-  //     void s.value;
-  //   });
-  //
-  //   expect(runCount).toBe(1);
-  //
-  //   // set a new object but get the equal result by the custom comparer
-  //   s.setValue({ value: 2, label: 'default' });
-  //   expect(runCount).toBe(1);
-  //   expect(s.value.value).toBe(1);
-  // });
 });
 
-describe('Batch', () => {
-  test('basic read and write', () => {
+describe('7. Batch: grouped writes', () => {
+  test('7.1 several writes in a batch are computed only once', () => {
     const a = new SignalValue(1);
 
     let runCount = 0;
@@ -373,7 +569,7 @@ describe('Batch', () => {
     expect(runCount).toBe(1);
   });
 
-  test('a version restored by the batch rollback must not be reused by a later write', () => {
+  test('7.2 a version restored by the batch rollback must not be reused by a later write', () => {
     const a = new SignalValue(1);
 
     let runCount = 0;
@@ -403,7 +599,7 @@ describe('Batch', () => {
     expect(runCount).toBe(3);
   });
 
-  test('a write after the batch rollback must still notify the effect', () => {
+  test('7.3 a write after the batch rollback must still notify the effect', () => {
     const a = new SignalValue(1);
 
     const seen: number[] = [];
@@ -427,7 +623,7 @@ describe('Batch', () => {
     expect(seen).toEqual([1, 3]);
   });
 
-  test('a write after the batch rollback must still reach the effect through a memo', () => {
+  test('7.4 a write after the batch rollback must still reach the effect through a memo', () => {
     const a = new SignalValue(1);
     const m = new MemoValue(() => a.value * 10);
 
@@ -453,4 +649,18 @@ describe('Batch', () => {
   });
 });
 
-// describe('TestSuite', () => {});
+describe('TestSuite', () => {
+  test('@179', () => {
+    const s = new SignalValue(1);
+    const c = new MemoValue(() => {
+      s.setValue(s.value + 1);
+      return s.value;
+    });
+
+    expect(c.value).toBe(2);
+    expect(s.value).toBe(2);
+
+    expect(c.value).toBe(3);
+    expect(s.value).toBe(3);
+  });
+});

@@ -1,13 +1,21 @@
 import type { ILinkedList, ILinkedNode } from '../utils';
 
-import type { IAction, IBatchSnapshot, IDirtyMarkable, ISignalValue, IValueOptions } from './types';
+import type {
+  IAction,
+  IBatchSnapshot,
+  IConnectable,
+  IConnectManager,
+  IDirtyMarkable,
+  ISignalValue,
+  IValueOptions,
+} from './types';
 
 import { BatchScope, LinkedList } from '../utils';
 
 import { globalContext } from './global-context';
 import { getClock, notifyListeners } from './utils';
 
-export class SignalValue<T> implements ISignalValue<T> {
+export class SignalValue<T> implements ISignalValue<T>, IConnectable {
   private _value: T;
   private _name?: string;
   private _version: number;
@@ -15,6 +23,9 @@ export class SignalValue<T> implements ISignalValue<T> {
   private _comparer?: IAction<[T, T], boolean>;
   private _listeners?: ILinkedList<IDirtyMarkable>;
   private _batchQueueNode?: ILinkedNode<IBatchSnapshot>;
+
+  lastRunId?: number;
+  lastInstance?: IConnectManager;
 
   constructor(value: T, options?: IValueOptions<T>) {
     this._version = 0;

@@ -1,6 +1,6 @@
 import type { ILinkedList, ILinkedNode } from '../utils';
 
-import type { IAction, IDirtyMarkable, IMemoValue, IValueOptions } from './types';
+import type { IAction, IConnectable, IConnectManager, IDirtyMarkable, IMemoValue, IValueOptions } from './types';
 
 import { LinkedList } from '../utils';
 
@@ -10,7 +10,7 @@ import { notifyListeners } from './utils';
 
 const defaultValue = Symbol('default_memo_value');
 
-export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T> {
+export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T>, IConnectable {
   private _name?: string;
   private _version: number;
   private _hasBeenRead: boolean;
@@ -18,6 +18,9 @@ export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T
   private _value: T | typeof defaultValue;
   private _comparer?: IAction<[T, T], boolean>;
   private _listeners?: ILinkedList<IDirtyMarkable> | undefined;
+
+  lastRunId?: number;
+  lastInstance?: IConnectManager;
 
   constructor(getter: IAction<[], T>, options?: IValueOptions<T>) {
     super();

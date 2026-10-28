@@ -7,24 +7,34 @@ import { Disposable, ErrorScope, LinkedList } from '../utils';
 import { globalContext } from './global-context';
 
 export abstract class Runnable<T extends Runnable<T>> extends Disposable implements IDirtyMarkable, IConnectManager {
+  private _runId: number;
   private _isSelfRunning: boolean;
   private _isInitialized: boolean;
   private _ownNode?: ILinkedNode<IDisposable>;
+  private _connectors: ILinkedList<ISnapshot>;
 
-  connectors: ILinkedList<ISnapshot>;
   queueNode?: ILinkedNode<IEffectAction>;
   currentConnect?: ILinkedNode<ISnapshot> | null;
 
   constructor() {
     super();
 
+    this._runId = 0;
     this._isInitialized = false;
     this._isSelfRunning = false;
-    this.connectors = new LinkedList<ISnapshot>();
+    this._connectors = new LinkedList<ISnapshot>();
     this._ownNode = globalContext.activeOwner?.adopt(this);
   }
 
   abstract markDirty(): void;
+
+  get runId(): number {
+    return this._runId;
+  }
+
+  get connectors(): ILinkedList<ISnapshot> {
+    return this._connectors;
+  }
 
   protected execute<TResult = void, TDefaultValue = void>(
     action: IAction<[context: T], TResult>,
@@ -50,7 +60,8 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
 
       const ctx = ErrorScope.begin();
       try {
-        this.currentConnect = this.connectors.head;
+        this._runId += 1;
+        this.currentConnect = this._connectors.head;
         const result = action(this as unknown as T);
         this.clearConnnectsTail();
         return result;
@@ -83,13 +94,13 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
     this._ownNode = undefined;
 
     this.currentConnect = null;
-    let node = this.connectors.head;
+    let node = this._connectors.head;
     while (node) {
       node.value.node.removeSelf();
       node.removeSelf();
-      node = this.connectors.head;
+      node = this._connectors.head;
     }
-    this.connectors = undefined as unknown as ILinkedList<ISnapshot>;
+    this._connectors = undefined as unknown as ILinkedList<ISnapshot>;
   }
 
   private clearConnnectsTail() {
@@ -107,7 +118,7 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
       return true;
     }
 
-    let node = this.connectors.head;
+    let node = this._connectors.head;
     const ctx = ErrorScope.begin();
     try {
       while (node) {
