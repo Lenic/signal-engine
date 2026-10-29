@@ -3,7 +3,7 @@ const startCounts: number[] = [];
 let depth = -1;
 let errors: unknown[] = [];
 
-export class ScopeAbortSignal {
+class ScopeAbortSignal {
   private constructor() {}
 
   static readonly instance = new ScopeAbortSignal();
