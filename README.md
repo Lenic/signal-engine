@@ -164,7 +164,7 @@ An effect that writes to a signal it also reads does not recurse: the write is n
 runs once more after the current run finishes. A cycle that never settles is cut off after 100
 rounds with an error, instead of hanging the process.
 
-### `beginBatch()` / `endBatch(context)`
+### `beginBatch()` / `endBatch(level)`
 
 Groups writes so that everything downstream sees one settled result instead of each intermediate
 step. Always pair them with `try` / `finally`:
@@ -177,12 +177,12 @@ const height = signal(20);
 
 effect(() => console.log(width() * height()));  // → 200
 
-const ctx = beginBatch();
+const level = beginBatch();
 try {
   width(30);
   height(40);
 } finally {
-  endBatch(ctx);
+  endBatch(level);
 }
 // → 1200, once — not 600 then 1200
 ```
@@ -191,8 +191,10 @@ Inside a batch, a write takes effect immediately for anyone reading it, but effe
 as the outermost `endBatch()` returns, not on a later tick. Batches nest. And if the writes cancel
 out (set to something else and back again), nothing downstream runs at all.
 
-`endBatch()` checks that it is closing the scope `beginBatch()` opened. Passing the wrong context
-throws, but the scope still closes, so one mistake does not leave every later write deferred.
+`beginBatch()` returns the nesting level of the batch it opens, and `endBatch(level)` closes that
+level together with any batch still open inside it. Ending a batch that is already closed does
+nothing, so ending the outer one first, or ending the same one twice, never leaves later writes
+deferred or the batch depth out of step.
 
 ### `untrack(fn)`
 

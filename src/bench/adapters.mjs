@@ -24,11 +24,11 @@ export const adapters = [
     },
     effect: (fn) => lenic.effect(fn),
     batch: (fn) => {
-      const context = lenic.beginBatch();
+      const level = lenic.beginBatch();
       try {
         fn();
       } finally {
-        lenic.endBatch(context);
+        lenic.endBatch(level);
       }
     },
   },
