@@ -4,8 +4,8 @@ import type { IAction, IRunnable, ISnapshot } from './types';
 
 import { Disposable, LinkedList } from '../utils';
 
-import { ErrorScope } from './error-scope';
-import { globalContext } from './global-context';
+import { ErrorScope } from './error';
+import { globalContext } from './context';
 
 export abstract class Runnable<T extends Runnable<T>> extends Disposable implements IRunnable {
   private _runId: number;

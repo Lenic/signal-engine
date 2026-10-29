@@ -12,8 +12,8 @@ import type {
 
 import { LinkedList } from '../utils';
 
-import { BatchScope } from './batch-scope';
-import { globalContext } from './global-context';
+import { BatchScope } from './batch';
+import { globalContext } from './context';
 import { getClock, notifyListeners } from './utils';
 
 export class SignalValue<T> implements ISignalValue<T>, IConnectable {

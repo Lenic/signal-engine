@@ -4,8 +4,8 @@ import type { IBatchSnapshot, IConnectable, IEffectAction, IEffectOwner, IRunnab
 
 import { LinkedList } from '../utils';
 
-import { BatchScope } from './batch-scope';
-import { ErrorScope } from './error-scope';
+import { BatchScope } from './batch';
+import { ErrorScope } from './error';
 import { notifyListeners } from './utils';
 
 const MAX_ITERATION_DEPTH = 100;

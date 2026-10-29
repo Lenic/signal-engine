@@ -4,7 +4,7 @@ import type { IAction, IConnectManager, IDirtyMarkable, IMemoValue, IValueOption
 
 import { LinkedList } from '../utils';
 
-import { globalContext } from './global-context';
+import { globalContext } from './context';
 import { Runnable } from './runnable';
 import { notifyListeners } from './utils';
 

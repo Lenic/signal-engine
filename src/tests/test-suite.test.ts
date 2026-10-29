@@ -3,11 +3,11 @@ import type { ReactiveFramework } from 'reactive-framework-test-suite';
 import { testSuite, SkipTest, setExpect } from 'reactive-framework-test-suite';
 import { describe, expect, test } from 'vitest';
 
-import { BatchScope } from '../base/batch-scope';
-import { EffectAction } from '../base/effect-action';
-import { globalContext } from '../base/global-context';
-import { MemoValue } from '../base/memo-value';
-import { SignalValue } from '../base/signal-value';
+import { BatchScope } from '../base/batch';
+import { EffectAction } from '../base/effect';
+import { globalContext } from '../base/context';
+import { MemoValue } from '../base/memo';
+import { SignalValue } from '../base/signal';
 
 const framework: ReactiveFramework = {
   signal(initialValue) {

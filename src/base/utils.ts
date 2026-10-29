@@ -2,8 +2,8 @@ import type { ILinkedList } from '../utils';
 
 import type { IAction, IDirtyMarkable } from './types';
 
-import { BatchScope } from './batch-scope';
-import { ErrorScope } from './error-scope';
+import { BatchScope } from './batch';
+import { ErrorScope } from './error';
 
 let clock = 0;
 export function getClock() {

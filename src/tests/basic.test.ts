@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'vitest';
 
-import { BatchScope } from '../base/batch-scope';
-import { EffectAction } from '../base/effect-action';
-import { MemoValue } from '../base/memo-value';
-import { SignalValue } from '../base/signal-value';
+import { BatchScope } from '../base/batch';
+import { EffectAction } from '../base/effect';
+import { MemoValue } from '../base/memo';
+import { SignalValue } from '../base/signal';
 
 describe('1. Signal: read, write and equality', () => {
   test('1.1 basic read and write', () => {

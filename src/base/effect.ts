@@ -4,8 +4,8 @@ import type { IAction, IEffectAction, INamedObject } from './types';
 
 import { LinkedList } from '../utils';
 
-import { BatchScope } from './batch-scope';
-import { globalContext } from './global-context';
+import { BatchScope } from './batch';
+import { globalContext } from './context';
 import { Runnable } from './runnable';
 import { notifyListeners } from './utils';
 
