@@ -2,8 +2,9 @@ import type { IDisposable, ILinkedList, ILinkedNode } from '../utils';
 
 import type { IAction, IRunnable, ISnapshot } from './types';
 
-import { Disposable, ErrorScope, LinkedList } from '../utils';
+import { Disposable, LinkedList } from '../utils';
 
+import { ErrorScope } from './error-scope';
 import { globalContext } from './global-context';
 
 export abstract class Runnable<T extends Runnable<T>> extends Disposable implements IRunnable {
@@ -18,6 +19,8 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
 
   constructor() {
     super();
+
+    this.currentConnect = null;
 
     this._runId = 0;
     this._isInitialized = false;
@@ -58,18 +61,14 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
       // maybe dispose current instance in the dependencies.
       if (this.isDisposed) return defalutValue;
 
-      const ctx = ErrorScope.begin();
+      const level = ErrorScope.begin();
       try {
-        this._runId += 1;
-        this.currentConnect = this._connectors.head;
-        const result = action(this as unknown as T);
-        this.clearConnnectsTail();
-        return result;
+        return this.runAction(action);
       } catch (e) {
-        ctx.push(e);
+        ErrorScope.record(e);
         return defalutValue;
       } finally {
-        ErrorScope.end(ctx);
+        ErrorScope.end(level);
       }
     } finally {
       this._isSelfRunning = false;
@@ -100,6 +99,14 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
     this._connectors = undefined as unknown as ILinkedList<ISnapshot>;
   }
 
+  private runAction<TResult>(action: IAction<[context: T], TResult>): TResult {
+    this._runId += 1;
+    this.currentConnect = this._connectors.head;
+    const result = action(this as unknown as T);
+    this.clearConnnectsTail();
+    return result;
+  }
+
   private clearConnnectsTail() {
     let node = this.currentConnect;
     while (node) {
@@ -116,21 +123,12 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
     }
 
     let node = this._connectors.head;
-    const ctx = ErrorScope.begin();
-    try {
-      while (node) {
-        try {
-          const { value } = node;
-          if (value.version !== value.instance.version) return true;
-          node = node.next;
-        } catch (e) {
-          ctx.push(e);
-          return false;
-        }
-      }
-    } finally {
-      ErrorScope.end(ctx);
+    while (node) {
+      const { value } = node;
+      if (value.version !== value.instance.version) return true;
+      node = node.next;
     }
+
     return false;
   }
 }

@@ -2,6 +2,7 @@
   "compilerOptions": {
     "strict": true,
     "target": "ES2022",
+    "useDefineForClassFields": false,
     "module": "ESNext",
     "moduleResolution": "bundler",
     "declarationMap": true,

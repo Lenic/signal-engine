@@ -28,6 +28,11 @@ export class SignalValue<T> implements ISignalValue<T>, IConnectable {
   lastInstance?: IConnectManager;
 
   constructor(value: T, options?: IValueOptions<T>) {
+    this.lastRunId = undefined;
+    this._listeners = undefined;
+    this.lastInstance = undefined;
+    this._batchQueueNode = undefined;
+
     this._version = 0;
     this._value = value;
     this._hasBeenRead = false;

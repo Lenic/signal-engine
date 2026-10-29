@@ -1,8 +1,10 @@
 import type { ILinkedList } from '../utils';
 
-import type { IAction } from './types';
+import type { IAction, IDirtyMarkable } from './types';
 
-import { BatchScope, ErrorScope } from '../utils';
+import { BatchScope } from '../utils';
+
+import { ErrorScope } from './error-scope';
 
 let clock = 0;
 export function getClock() {
@@ -18,13 +20,16 @@ export function notifyListeners<T>(
   let node = list?.head;
   if (!node) return;
 
-  const batchContext = BatchScope.begin();
-  const errorContext = ErrorScope.begin();
+  // Dirty marking recurses once per memo, so only the outermost call opens scopes. A nested
+  // BatchScope would exit without flushing, and a nested ErrorScope would only record and abort -
+  // both are reproduced here without spending a depth level per node.
+  const batchContext = BatchScope.isBatching ? undefined : BatchScope.begin();
+  const errorLevel = ErrorScope.begin();
   while (node) {
     try {
       action?.(node.value);
     } catch (e) {
-      errorContext.push(e);
+      ErrorScope.record(e);
     }
     if (withCleanup) {
       node.removeSelf();
@@ -34,8 +39,20 @@ export function notifyListeners<T>(
     }
   }
   try {
-    ErrorScope.end(errorContext);
+    ErrorScope.end(errorLevel);
   } finally {
-    BatchScope.end(batchContext);
+    if (batchContext) BatchScope.end(batchContext);
   }
+}
+
+function setDirty(instance: IDirtyMarkable) {
+  instance.markDirty();
+}
+/**
+ * notifyListeners() specialised for the hottest caller: a write marking its readers dirty. Calling
+ * markDirty() directly keeps this call site to the two reader classes, where the generic one also
+ * sees dispose and cleanup callbacks and stops being inlined.
+ */
+export function markListenersDirty(list: ILinkedList<IDirtyMarkable> | undefined): void {
+  return notifyListeners(list, setDirty);
 }

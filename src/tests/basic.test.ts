@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { EffectAction } from '../base/effect-action';
+import { ErrorScope } from '../base/error-scope';
 import { MemoValue } from '../base/memo-value';
 import { SignalValue } from '../base/signal-value';
 import { BatchScope } from '../utils';
@@ -646,6 +647,68 @@ describe('7. Batch: grouped writes', () => {
     // and only its version is checked afterwards, so `m` must not stay marked as unread either
     a.setValue(3);
     expect(seen).toEqual([10, 30]);
+  });
+});
+
+describe('8. Depth: long dependency chains', () => {
+  // Nothing in the graph caps its depth; only the call stack does. Each level used to open its
+  // own error scope, which made the scope's iteration ceiling a hidden limit of about 100 memos.
+  const DEPTH = 300;
+
+  function buildChain(source: SignalValue<number>) {
+    let node: { readonly value: number } = source;
+    for (let i = 0; i < DEPTH; i++) {
+      const prev = node;
+      node = new MemoValue(() => prev.value + 1);
+    }
+    return node;
+  }
+
+  test('8.1 a long chain computes on its first read', () => {
+    const s = new SignalValue(0);
+    expect(buildChain(s).value).toBe(DEPTH);
+  });
+
+  test('8.2 a write propagates down a long chain to an effect', () => {
+    const s = new SignalValue(0);
+    const tail = buildChain(s);
+
+    const seen: number[] = [];
+    new EffectAction(() => {
+      seen.push(tail.value);
+    });
+
+    s.setValue(1);
+    s.setValue(2);
+    expect(seen).toEqual([DEPTH, DEPTH + 1, DEPTH + 2]);
+  });
+
+  test('8.3 an error at the top of a long chain reaches the writer', () => {
+    const s = new SignalValue(0);
+    const head = new MemoValue(() => {
+      if (s.value === 1) throw new Error('head failed');
+      return s.value;
+    });
+    let node: { readonly value: number } = head;
+    for (let i = 0; i < DEPTH; i++) {
+      const prev = node;
+      node = new MemoValue(() => prev.value + 1);
+    }
+    const tail = node;
+
+    new EffectAction(() => {
+      void tail.value;
+    });
+
+    expect(() => s.setValue(1)).toThrow('head failed');
+
+    // the graph is still usable afterwards
+    const seen: number[] = [];
+    new EffectAction(() => {
+      seen.push(tail.value);
+    });
+    s.setValue(2);
+    expect(seen.at(-1)).toBe(DEPTH + 2);
   });
 });
 

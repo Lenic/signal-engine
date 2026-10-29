@@ -25,6 +25,10 @@ export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T
   constructor(getter: IAction<[], T>, options?: IValueOptions<T>) {
     super();
 
+    this.lastRunId = undefined;
+    this._listeners = undefined;
+    this.lastInstance = undefined;
+
     this._version = 0;
     this._hasBeenRead = false;
     this._value = defaultValue;

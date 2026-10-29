@@ -2,8 +2,9 @@ import type { ILinkedList } from '../utils';
 
 import type { IBatchSnapshot, IConnectable, IEffectAction, IEffectOwner, IRunnable } from './types';
 
-import { BatchScope, ErrorScope, LinkedList } from '../utils';
+import { BatchScope, LinkedList } from '../utils';
 
+import { ErrorScope } from './error-scope';
 import { notifyListeners } from './utils';
 
 const MAX_ITERATION_DEPTH = 100;
@@ -20,7 +21,6 @@ export const globalContext = {
     if (!this.activeEffect) return;
     if (this.activeEffect.isDisposed) return;
 
-    const ctx = ErrorScope.begin();
     const effect = this.activeEffect;
     try {
       const sourceVersion = source.version;
@@ -54,13 +54,9 @@ export const globalContext = {
         }
         effect.currentConnect = effect.currentConnect.next;
       }
-    } catch (e) {
-      ctx.push(e);
     } finally {
       source.lastInstance = effect;
       source.lastRunId = effect.runId;
-
-      ErrorScope.end(ctx);
     }
   },
   untracked<T>(fn: () => T) {
@@ -88,7 +84,6 @@ function consumeTail() {
   if (isConsuming) return;
   isConsuming = true;
 
-  const errorContext = ErrorScope.begin();
   try {
     let iterationLevel = 0;
     while (globalContext.effectList.size) {
@@ -104,23 +99,26 @@ function consumeTail() {
       globalContext.effectList = inactiveEffectList;
       inactiveEffectList = list;
 
-      while (list.size) {
+      const errorLevel = ErrorScope.begin();
+      try {
         while (list.head) {
           try {
             const instance = list.head.value;
             list.head.removeSelf();
             instance.run();
           } catch (e) {
-            errorContext.push(e);
+            ErrorScope.record(e);
           }
         }
+      } finally {
+        if (ErrorScope.hasError) {
+          while (inactiveEffectList.head) inactiveEffectList.head.removeSelf();
+        }
+        ErrorScope.end(errorLevel);
       }
     }
-  } catch (e) {
-    errorContext.push(e);
   } finally {
     isConsuming = false;
-    ErrorScope.end(errorContext);
   }
 }
 BatchScope.onBeforeExit = (depth: number) => {

@@ -19,6 +19,10 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
   constructor(action: IAction<[], void | IAction>, options?: INamedObject) {
     super();
 
+    this._children = undefined;
+    this._queueNode = undefined;
+    this._customCleanup = undefined;
+
     this._action = action;
     this._name = options?.name;
     this._needsToPushToQueue = false;
