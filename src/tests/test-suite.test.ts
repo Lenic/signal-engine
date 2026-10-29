@@ -4,8 +4,8 @@ import { testSuite, SkipTest, setExpect } from 'reactive-framework-test-suite';
 import { describe, expect, test } from 'vitest';
 
 import { BatchScope } from '../base/batch';
-import { EffectAction } from '../base/effect';
 import { globalContext } from '../base/context';
+import { EffectAction } from '../base/effect';
 import { MemoValue } from '../base/memo';
 import { SignalValue } from '../base/signal';
 
