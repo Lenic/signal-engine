@@ -2,8 +2,7 @@ import type { ILinkedList } from '../utils';
 
 import type { IAction, IDirtyMarkable } from './types';
 
-import { BatchScope } from '../utils';
-
+import { BatchScope } from './batch-scope';
 import { ErrorScope } from './error-scope';
 
 let clock = 0;
@@ -20,10 +19,7 @@ export function notifyListeners<T>(
   let node = list?.head;
   if (!node) return;
 
-  // Dirty marking recurses once per memo, so only the outermost call opens scopes. A nested
-  // BatchScope would exit without flushing, and a nested ErrorScope would only record and abort -
-  // both are reproduced here without spending a depth level per node.
-  const batchContext = BatchScope.isBatching ? undefined : BatchScope.begin();
+  const batchLevel = BatchScope.isBatching ? null : BatchScope.begin();
   const errorLevel = ErrorScope.begin();
   while (node) {
     try {
@@ -41,7 +37,9 @@ export function notifyListeners<T>(
   try {
     ErrorScope.end(errorLevel);
   } finally {
-    if (batchContext) BatchScope.end(batchContext);
+    if (batchLevel !== null) {
+      BatchScope.end(batchLevel);
+    }
   }
 }
 

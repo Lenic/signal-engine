@@ -1,3 +1,4 @@
+export * from './batch-scope';
 export * from './effect-action';
 export * from './global-context';
 export * from './memo-value';

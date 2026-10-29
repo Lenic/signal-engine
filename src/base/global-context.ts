@@ -2,8 +2,9 @@ import type { ILinkedList } from '../utils';
 
 import type { IBatchSnapshot, IConnectable, IEffectAction, IEffectOwner, IRunnable } from './types';
 
-import { BatchScope, LinkedList } from '../utils';
+import { LinkedList } from '../utils';
 
+import { BatchScope } from './batch-scope';
 import { ErrorScope } from './error-scope';
 import { notifyListeners } from './utils';
 
@@ -112,7 +113,7 @@ function consumeTail() {
         }
       } finally {
         if (ErrorScope.hasError) {
-          while (inactiveEffectList.head) inactiveEffectList.head.removeSelf();
+          while (globalContext.effectList.head) globalContext.effectList.head.removeSelf();
         }
         ErrorScope.end(errorLevel);
       }
@@ -121,7 +122,4 @@ function consumeTail() {
     isConsuming = false;
   }
 }
-BatchScope.onBeforeExit = (depth: number) => {
-  if (depth !== -1) return;
-  consumeTail();
-};
+BatchScope.onBeforeExit = consumeTail;

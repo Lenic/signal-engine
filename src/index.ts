@@ -1,8 +1,6 @@
 import type { IValueOptions, IAction, INamedObject } from './base';
-import type { IBatchScopeContext } from './utils';
 
-import { SignalValue, MemoValue, EffectAction, globalContext } from './base';
-import { BatchScope } from './utils';
+import { SignalValue, MemoValue, EffectAction, globalContext, BatchScope } from './base';
 
 export * from './base';
 export * from './utils';
@@ -37,8 +35,8 @@ export function beginBatch() {
   return BatchScope.begin();
 }
 
-export function endBatch(context: IBatchScopeContext) {
-  BatchScope.end(context);
+export function endBatch(level: number) {
+  BatchScope.end(level);
 }
 
 export function untrack<T>(fn: () => T) {

@@ -2,8 +2,9 @@ import type { IDisposable, ILinkedList, ILinkedNode } from '../utils';
 
 import type { IAction, IEffectAction, INamedObject } from './types';
 
-import { BatchScope, LinkedList } from '../utils';
+import { LinkedList } from '../utils';
 
+import { BatchScope } from './batch-scope';
 import { globalContext } from './global-context';
 import { Runnable } from './runnable';
 import { notifyListeners } from './utils';
@@ -67,11 +68,11 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
         this._needsToPushToQueue = false;
 
         // fire consumeTail method of the global-context file.
-        const ctx = BatchScope.begin();
+        const level = BatchScope.begin();
         try {
           this.pushToQueue();
         } finally {
-          BatchScope.end(ctx);
+          BatchScope.end(level);
         }
       }
     }

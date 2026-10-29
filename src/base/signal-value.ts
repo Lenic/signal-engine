@@ -10,8 +10,9 @@ import type {
   IValueOptions,
 } from './types';
 
-import { BatchScope, LinkedList } from '../utils';
+import { LinkedList } from '../utils';
 
+import { BatchScope } from './batch-scope';
 import { globalContext } from './global-context';
 import { getClock, notifyListeners } from './utils';
 

@@ -3,11 +3,11 @@ import type { ReactiveFramework } from 'reactive-framework-test-suite';
 import { testSuite, SkipTest, setExpect } from 'reactive-framework-test-suite';
 import { describe, expect, test } from 'vitest';
 
+import { BatchScope } from '../base/batch-scope';
 import { EffectAction } from '../base/effect-action';
 import { globalContext } from '../base/global-context';
 import { MemoValue } from '../base/memo-value';
 import { SignalValue } from '../base/signal-value';
-import { BatchScope } from '../utils';
 
 const framework: ReactiveFramework = {
   signal(initialValue) {
@@ -31,11 +31,11 @@ const framework: ReactiveFramework = {
   batch(fn) {
     // `#176 batch return value` checks that the callback's return value is forwarded.
     let result: unknown;
-    const ctx = BatchScope.begin();
+    const level = BatchScope.begin();
     try {
       result = fn();
     } finally {
-      BatchScope.end(ctx);
+      BatchScope.end(level);
     }
     return result as void;
   },

@@ -1,10 +1,9 @@
 import { describe, expect, test } from 'vitest';
 
+import { BatchScope } from '../base/batch-scope';
 import { EffectAction } from '../base/effect-action';
-import { ErrorScope } from '../base/error-scope';
 import { MemoValue } from '../base/memo-value';
 import { SignalValue } from '../base/signal-value';
-import { BatchScope } from '../utils';
 
 describe('1. Signal: read, write and equality', () => {
   test('1.1 basic read and write', () => {
@@ -558,12 +557,12 @@ describe('7. Batch: grouped writes', () => {
       return a.value * 10;
     });
 
-    const ctx = BatchScope.begin();
+    const level = BatchScope.begin();
     try {
       a.setValue(2);
       a.setValue(3);
     } finally {
-      BatchScope.end(ctx);
+      BatchScope.end(level);
     }
 
     expect(m.value).toBe(30);
@@ -582,7 +581,7 @@ describe('7. Batch: grouped writes', () => {
     expect(m.value).toBe(10);
     expect(runCount).toBe(1);
 
-    const context = BatchScope.begin();
+    const level = BatchScope.begin();
     try {
       a.setValue(2);
       expect(m.value).toBe(20);
@@ -590,7 +589,7 @@ describe('7. Batch: grouped writes', () => {
 
       a.setValue(1);
     } finally {
-      BatchScope.end(context);
+      BatchScope.end(level);
     }
 
     a.setValue(3);
@@ -608,12 +607,12 @@ describe('7. Batch: grouped writes', () => {
       seen.push(a.value);
     });
 
-    const context = BatchScope.begin();
+    const level = BatchScope.begin();
     try {
       a.setValue(2);
       a.setValue(1);
     } finally {
-      BatchScope.end(context);
+      BatchScope.end(level);
     }
 
     // the rollback restores the version, so the queued effect is skipped
@@ -633,12 +632,12 @@ describe('7. Batch: grouped writes', () => {
       seen.push(m.value);
     });
 
-    const context = BatchScope.begin();
+    const level = BatchScope.begin();
     try {
       a.setValue(2);
       a.setValue(1);
     } finally {
-      BatchScope.end(context);
+      BatchScope.end(level);
     }
 
     expect(seen).toEqual([10]);
