@@ -1,4 +1,4 @@
-import type { ILinkedList } from '../utils';
+import type { ILinkedList, ILinkedNode } from '../utils';
 
 import type { IAction, IDirtyMarkable } from './types';
 
@@ -11,31 +11,30 @@ export function getClock() {
   return clock;
 }
 
-export function notifyListeners<T>(
-  list: ILinkedList<T> | undefined,
-  action: IAction<[T]> | null,
-  withCleanup: boolean = false,
-): void {
+export function notifyListeners<T>(list: ILinkedList<T> | undefined, action: IAction<[T]> | null): void {
   let node = list?.head;
   if (!node) return;
 
   const batchLevel = BatchScope.isBatching ? null : BatchScope.begin();
-  const errorLevel = ErrorScope.begin();
+  // Join an enclosing scope instead of nesting one: a nested scope would end by throwing its
+  // private abort signal into whatever user code called dispose() inside an effect.
+  const errorLevel = ErrorScope.isActive ? null : ErrorScope.begin();
+
   while (node) {
     try {
       action?.(node.value);
     } catch (e) {
       ErrorScope.record(e);
     }
-    if (withCleanup) {
-      node.removeSelf();
-      node = list?.head;
-    } else {
-      node = node.next;
-    }
+
+    node.removeSelf();
+    node = list?.head;
   }
+
   try {
-    ErrorScope.end(errorLevel);
+    if (errorLevel !== null) {
+      ErrorScope.end(errorLevel);
+    }
   } finally {
     if (batchLevel !== null) {
       BatchScope.end(batchLevel);
@@ -43,14 +42,46 @@ export function notifyListeners<T>(
   }
 }
 
-function setDirty(instance: IDirtyMarkable) {
-  instance.markDirty();
+function notifyDirtyWalk(head: ILinkedNode<IDirtyMarkable>): void {
+  let node: ILinkedNode<IDirtyMarkable> | null = head;
+
+  const level = ErrorScope.isActive ? null : ErrorScope.begin();
+  try {
+    while (node) {
+      try {
+        node.value.markDirty();
+      } catch (e) {
+        ErrorScope.record(e);
+      }
+      node = node.next;
+    }
+  } finally {
+    if (level !== null) {
+      ErrorScope.end(level);
+    }
+  }
 }
+
 /**
- * notifyListeners() specialised for the hottest caller: a write marking its readers dirty. Calling
- * markDirty() directly keeps this call site to the two reader classes, where the generic one also
- * sees dispose and cleanup callbacks and stops being inlined.
+ * notifyListeners() specialised for the hottest caller: a write marking its readers dirty.
+ *
+ * Marking dirty runs no user code -- memos only flip a flag and effects only queue themselves,
+ * since the walk always runs inside a batch -- so it skips the error scope that notifyListeners()
+ * opens per call. Errors are collected only when something actually throws.
  */
-export function markListenersDirty(list: ILinkedList<IDirtyMarkable> | undefined): void {
-  return notifyListeners(list, setDirty);
+export function notifyDirty(list: ILinkedList<IDirtyMarkable> | undefined): void {
+  const head = list?.head;
+  if (!head) return;
+
+  if (BatchScope.isBatching) {
+    notifyDirtyWalk(head);
+    return;
+  }
+
+  const level = BatchScope.begin();
+  try {
+    notifyDirtyWalk(head);
+  } finally {
+    BatchScope.end(level);
+  }
 }

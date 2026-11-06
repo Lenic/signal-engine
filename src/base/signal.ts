@@ -14,7 +14,7 @@ import { LinkedList } from '../utils';
 
 import { BatchScope } from './batch';
 import { globalContext } from './context';
-import { getClock, notifyListeners } from './utils';
+import { getClock, notifyDirty } from './utils';
 
 export class SignalValue<T> implements ISignalValue<T>, IConnectable {
   private _value: T;
@@ -89,7 +89,7 @@ export class SignalValue<T> implements ISignalValue<T>, IConnectable {
        */
       if (this._hasBeenRead) {
         this._hasBeenRead = false;
-        notifyListeners(this._listeners, SignalValue.publish);
+        notifyDirty(this._listeners);
       }
     }
   }
@@ -99,10 +99,6 @@ export class SignalValue<T> implements ISignalValue<T>, IConnectable {
     if (!this._comparer) return false;
 
     return this._comparer(this._value, target);
-  }
-
-  private static publish(target: IDirtyMarkable) {
-    target.markDirty();
   }
 
   private static releaseFromBatch(node: ILinkedNode<IBatchSnapshot>) {

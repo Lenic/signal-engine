@@ -18,47 +18,50 @@ export const globalContext = {
   effectList: new LinkedList<IEffectAction>() as ILinkedList<IEffectAction>,
   batchSnapshots: new LinkedList<IBatchSnapshot>() as ILinkedList<IBatchSnapshot>,
   activeEffect: undefined as IRunnable | undefined,
+  // hot path: no try/finally -- every exit below records the read mark itself.
   track(source: IConnectable): void {
-    if (!this.activeEffect) return;
-    if (this.activeEffect.isDisposed) return;
-
     const effect = this.activeEffect;
-    try {
-      const sourceVersion = source.version;
-      if (!effect.currentConnect) {
-        if (source.lastInstance === effect && source.lastRunId === effect.runId) return;
+    if (effect === undefined || effect.isDisposed) return;
 
-        const connector = effect.connectors.append({
+    const runId = effect.runId;
+    const sourceVersion = source.version;
+    const current = effect.currentConnect;
+
+    if (!current) {
+      // already connected during this run: nothing to append
+      if (source.lastInstance === effect && source.lastRunId === runId) return;
+
+      effect.connectors.append({
+        instance: source,
+        version: sourceVersion,
+        node: source.addChangeListener(effect),
+      });
+      // the appended connector is the tail, so there is nothing left to reuse
+      effect.currentConnect = null;
+    } else {
+      const value = current.value;
+      if (source === value.instance) {
+        value.version = sourceVersion;
+      } else {
+        value.node.removeSelf();
+        if (source.lastInstance === effect && source.lastRunId === runId) {
+          // a repeated read during this run: drop the stale slot instead of reusing it
+          effect.currentConnect = current.next;
+          current.removeSelf();
+          return;
+        }
+
+        current.value = {
           instance: source,
           version: sourceVersion,
           node: source.addChangeListener(effect),
-        });
-        this.activeEffect.currentConnect = connector.next;
-      } else {
-        const { value } = effect.currentConnect;
-        if (source === value.instance) {
-          value.version = sourceVersion;
-        } else {
-          effect.currentConnect.value.node.removeSelf();
-          if (source.lastInstance === effect && source.lastRunId == effect.runId) {
-            const deprecated = effect.currentConnect;
-            effect.currentConnect = effect.currentConnect.next;
-            deprecated.removeSelf();
-            return;
-          } else {
-            effect.currentConnect.value = {
-              instance: source,
-              version: sourceVersion,
-              node: source.addChangeListener(effect),
-            };
-          }
-        }
-        effect.currentConnect = effect.currentConnect.next;
+        };
       }
-    } finally {
-      source.lastInstance = effect;
-      source.lastRunId = effect.runId;
+      effect.currentConnect = current.next;
     }
+
+    source.lastInstance = effect;
+    source.lastRunId = runId;
   },
   untracked<T>(fn: () => T) {
     // Reads are tracked by whichever manager is active, so clearing it suppresses tracking.
@@ -80,7 +83,7 @@ export const globalContext = {
 
 let isConsuming = false;
 function consumeTail() {
-  notifyListeners(globalContext.batchSnapshots, null, true);
+  notifyListeners(globalContext.batchSnapshots, null);
 
   if (isConsuming) return;
   isConsuming = true;

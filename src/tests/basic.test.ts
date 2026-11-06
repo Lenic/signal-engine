@@ -711,4 +711,57 @@ describe('8. Depth: long dependency chains', () => {
   });
 });
 
+describe('9. Errors: collected at the outermost boundary', () => {
+  test('9.1 disposing inside an effect never hands the caller an internal signal', () => {
+    const fail = new Error('child cleanup failed');
+    const s = new SignalValue(0);
+
+    // the parent owns a child whose cleanup throws, so disposing it walks the children list
+    const parent = new EffectAction(() => {
+      new EffectAction(() => () => {
+        throw fail;
+      });
+    });
+
+    let caught: unknown = undefined;
+    new EffectAction(() => {
+      if (s.value !== 1) return;
+      try {
+        parent.dispose();
+      } catch (e) {
+        caught = e;
+      }
+    });
+
+    // dispose() joins the flush's scope instead of opening its own, so it returns normally and
+    // the error surfaces once the flush is over -- as itself, not as the private abort signal
+    expect(() => s.setValue(1)).toThrow(fail);
+    expect(caught).toBeUndefined();
+  });
+
+  test('9.2 a failing child cleanup neither stops its siblings nor the parent re-run', () => {
+    const fail = new Error('first cleanup failed');
+    const s = new SignalValue(0);
+    const cleaned: string[] = [];
+    let parentRuns = 0;
+
+    new EffectAction(() => {
+      parentRuns++;
+      void s.value;
+
+      new EffectAction(() => () => {
+        cleaned.push('first');
+        throw fail;
+      });
+      new EffectAction(() => () => {
+        cleaned.push('second');
+      });
+    });
+
+    expect(() => s.setValue(1)).toThrow(fail);
+    expect(cleaned).toEqual(['first', 'second']);
+    expect(parentRuns).toBe(2);
+  });
+});
+
 // describe('TestSuite', () => {});
