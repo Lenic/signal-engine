@@ -5,9 +5,9 @@ import type { IAction, IRunnable, ISnapshot } from './types';
 import { Disposable, LinkedList } from '../utils';
 
 import { globalContext } from './context';
-import { ErrorScope } from './error';
 
 export abstract class Runnable<T extends Runnable<T>> extends Disposable implements IRunnable {
+  private _name?: string;
   private _runId: number;
   private _isInitialized: boolean;
   private _ownNode?: ILinkedNode<IDisposable>;
@@ -17,12 +17,13 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
 
   currentConnect?: ILinkedNode<ISnapshot> | null;
 
-  constructor() {
+  constructor(name?: string) {
     super();
 
     this.currentConnect = null;
 
     this._runId = 0;
+    this._name = name;
     this._isInitialized = false;
     this._isSelfRunning = false;
     this._connectors = new LinkedList<ISnapshot>();
@@ -30,6 +31,10 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
   }
 
   abstract markDirty(): void;
+
+  get name(): string | undefined {
+    return this._name;
+  }
 
   get runId(): number {
     return this._runId;
@@ -58,18 +63,9 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
     try {
       if (!this.hasDependenciesChanged()) return defalutValue;
 
-      // maybe dispose current instance in the dependencies.
       if (this.isDisposed) return defalutValue;
 
-      const level = ErrorScope.begin();
-      try {
-        return this.runAction(action);
-      } catch (e) {
-        ErrorScope.record(e);
-        return defalutValue;
-      } finally {
-        ErrorScope.end(level);
-      }
+      return this.runAction(action);
     } finally {
       this._isSelfRunning = false;
 

@@ -11,7 +11,6 @@ import { notifyListeners } from './utils';
 const defaultValue = Symbol('default_memo_value');
 
 export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T> {
-  private _name?: string;
   private _version: number;
   private _hasBeenRead: boolean;
   private _getter: IAction<[], T>;
@@ -23,7 +22,7 @@ export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T
   lastInstance?: IConnectManager;
 
   constructor(getter: IAction<[], T>, options?: IValueOptions<T>) {
-    super();
+    super(options?.name);
 
     this.lastRunId = undefined;
     this._listeners = undefined;
@@ -34,12 +33,7 @@ export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T
     this._value = defaultValue;
 
     this._getter = getter;
-    this._name = options?.name;
     this._comparer = options?.comparer;
-  }
-
-  get name(): string | undefined {
-    return this._name;
   }
 
   get value(): T {

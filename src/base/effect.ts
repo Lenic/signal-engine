@@ -10,7 +10,6 @@ import { Runnable } from './runnable';
 import { notifyListeners } from './utils';
 
 export class EffectAction extends Runnable<EffectAction> implements IEffectAction {
-  private _name?: string;
   private _customCleanup?: IAction;
   private _needsToPushToQueue: boolean;
   private _action: IAction<[], void | IAction>;
@@ -18,21 +17,16 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
   private _queueNode?: ILinkedNode<IEffectAction>;
 
   constructor(action: IAction<[], void | IAction>, options?: INamedObject) {
-    super();
+    super(options?.name);
 
     this._children = undefined;
     this._queueNode = undefined;
     this._customCleanup = undefined;
 
     this._action = action;
-    this._name = options?.name;
     this._needsToPushToQueue = false;
 
     this.run();
-  }
-
-  get name(): string | undefined {
-    return this._name;
   }
 
   adopt(disposable: IDisposable): ILinkedNode<IDisposable> {
