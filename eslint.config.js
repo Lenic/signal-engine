@@ -11,6 +11,11 @@ export default tseslint.config(
   js.configs.recommended,
   tseslint.configs.recommended,
 
+  // 显式指定 tsconfig 根目录：仓库里还有 git worktree（如 .config/worktree），
+  // eslint_d 这类常驻进程加载过多份配置后，typescript-eslint 会因为
+  // 「存在多个候选 tsconfigRootDir」直接报解析错误，导致 --fix 静默失效。
+  { languageOptions: { parserOptions: { tsconfigRootDir: import.meta.dirname } } },
+
   // 纯 JS 的 bench 脚本跑在 node 里，需要 node 全局变量。
   {
     files: ['**/*.{js,mjs,cjs}'],
