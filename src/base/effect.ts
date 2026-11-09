@@ -77,7 +77,6 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
 
     super.dispose();
 
-    this._name = undefined;
     this._action = undefined as unknown as IAction;
 
     this._queueNode?.removeSelf();
@@ -97,7 +96,7 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
   }
 
   private releaseChildren() {
-    notifyListeners(this._children, EffectAction.releaseItem, true);
+    notifyListeners(this._children, EffectAction.releaseItem);
   }
 
   private runCustomCleanup() {

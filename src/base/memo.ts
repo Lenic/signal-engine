@@ -6,7 +6,7 @@ import { LinkedList } from '../utils';
 
 import { globalContext } from './context';
 import { Runnable } from './runnable';
-import { notifyListeners } from './utils';
+import { notifyListeners, notifyDirty } from './utils';
 
 const defaultValue = Symbol('default_memo_value');
 
@@ -69,7 +69,7 @@ export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T
     if (!this._hasBeenRead) return;
     this._hasBeenRead = false;
 
-    notifyListeners(this._listeners, MemoValue.publish);
+    notifyDirty(this._listeners);
   }
 
   dispose(): void {
@@ -79,7 +79,7 @@ export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T
 
     this._getter = undefined as unknown as IAction<[], T>;
 
-    notifyListeners(this._listeners, null, true);
+    notifyListeners(this._listeners, null);
     this._listeners = undefined;
   }
 
@@ -100,9 +100,5 @@ export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T
     if (this._value === defaultValue) return false;
 
     return this._comparer(this._value, target);
-  }
-
-  private static publish(target: IDirtyMarkable) {
-    target.markDirty();
   }
 }
