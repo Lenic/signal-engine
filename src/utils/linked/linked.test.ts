@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { addNew, unlink } from './main';
-import { EAddType } from './types';
+import { appendNode, buildLinkMethods, prependNode, unlink } from './main';
 
 /**
  * A node that sits in two independent lists at once, the same shape as `Connector`: one chain via
@@ -307,90 +306,98 @@ describe('unlink', () => {
   });
 });
 
-describe('addNew', () => {
-  function appendA(target: Node, owner: OwnerA): void {
-    addNew(target, owner, EAddType.append, 'prevA', 'nextA', 'aHead', 'aTail');
-  }
 
-  function prependA(target: Node, owner: OwnerA): void {
-    addNew(target, owner, EAddType.prepend, 'prevA', 'nextA', 'aHead', 'aTail');
-  }
+type TAddFn = (target: Node, owner: OwnerA) => void;
 
-  const ALREADY_LINKED = /already linked/;
+const ALREADY_LINKED = /already linked/;
 
-  describe('append', () => {
-    test('into an empty list: node becomes both head and tail', () => {
-      const owner: OwnerA = {};
-      const a = node('a');
+function appendA(target: Node, owner: OwnerA): void {
+  appendNode(target, owner, 'prevA', 'nextA', 'aHead', 'aTail');
+}
 
-      appendA(a, owner);
+function prependA(target: Node, owner: OwnerA): void {
+  prependNode(target, owner, 'prevA', 'nextA', 'aHead', 'aTail');
+}
 
-      expectListA(owner, [a]);
-    });
+const ADDERS: [string, TAddFn][] = [
+  ['appendNode', appendA],
+  ['prependNode', prependA],
+];
 
-    test('into a non-empty list: node becomes the new tail', () => {
-      const owner: OwnerA = {};
-      const [a, b, c] = [node('a'), node('b'), node('c')];
-      linkA(owner, [a, b]);
+describe('appendNode', () => {
+  test('into an empty list: node becomes both head and tail', () => {
+    const owner: OwnerA = {};
+    const a = node('a');
 
-      appendA(c, owner);
+    appendA(a, owner);
 
-      expectListA(owner, [a, b, c]);
-    });
-
-    test('repeated appends keep insertion order', () => {
-      const owner: OwnerA = {};
-      const nodes = ['a', 'b', 'c', 'd'].map(node);
-
-      for (let i = 0; i < nodes.length; i++) {
-        appendA(nodes[i]!, owner);
-        expectListA(owner, nodes.slice(0, i + 1));
-      }
-    });
+    expectListA(owner, [a]);
   });
 
-  describe('prepend', () => {
-    test('into an empty list: node becomes both head and tail', () => {
-      const owner: OwnerA = {};
-      const a = node('a');
+  test('into a non-empty list: node becomes the new tail', () => {
+    const owner: OwnerA = {};
+    const [a, b, c] = [node('a'), node('b'), node('c')];
+    linkA(owner, [a, b]);
 
-      prependA(a, owner);
+    appendA(c, owner);
 
-      expectListA(owner, [a]);
-    });
-
-    test('into a non-empty list: node becomes the new head', () => {
-      const owner: OwnerA = {};
-      const [a, b, c] = [node('a'), node('b'), node('c')];
-      linkA(owner, [b, c]);
-
-      prependA(a, owner);
-
-      expectListA(owner, [a, b, c]);
-    });
-
-    test('repeated prepends reverse insertion order', () => {
-      const owner: OwnerA = {};
-      const nodes = ['a', 'b', 'c', 'd'].map(node);
-
-      for (let i = 0; i < nodes.length; i++) {
-        prependA(nodes[i]!, owner);
-        expectListA(owner, nodes.slice(0, i + 1).reverse());
-      }
-    });
-
-    test('does not write the head key onto the node', () => {
-      const owner: OwnerA = {};
-      const [a, b] = [node('a'), node('b')];
-      appendA(a, owner);
-
-      prependA(b, owner);
-
-      expect(b).not.toHaveProperty('aHead');
-      expect(b).not.toHaveProperty('aTail');
-    });
+    expectListA(owner, [a, b, c]);
   });
 
+  test('repeated appends keep insertion order', () => {
+    const owner: OwnerA = {};
+    const nodes = ['a', 'b', 'c', 'd'].map(node);
+
+    for (let i = 0; i < nodes.length; i++) {
+      appendA(nodes[i]!, owner);
+      expectListA(owner, nodes.slice(0, i + 1));
+    }
+  });
+});
+
+describe('prependNode', () => {
+  test('into an empty list: node becomes both head and tail', () => {
+    const owner: OwnerA = {};
+    const a = node('a');
+
+    prependA(a, owner);
+
+    expectListA(owner, [a]);
+  });
+
+  test('into a non-empty list: node becomes the new head', () => {
+    const owner: OwnerA = {};
+    const [a, b, c] = [node('a'), node('b'), node('c')];
+    linkA(owner, [b, c]);
+
+    prependA(a, owner);
+
+    expectListA(owner, [a, b, c]);
+  });
+
+  test('repeated prepends reverse insertion order', () => {
+    const owner: OwnerA = {};
+    const nodes = ['a', 'b', 'c', 'd'].map(node);
+
+    for (let i = 0; i < nodes.length; i++) {
+      prependA(nodes[i]!, owner);
+      expectListA(owner, nodes.slice(0, i + 1).reverse());
+    }
+  });
+
+  test('does not write endpoint keys onto the node', () => {
+    const owner: OwnerA = {};
+    const [a, b] = [node('a'), node('b')];
+    appendA(a, owner);
+
+    prependA(b, owner);
+
+    expect(b).not.toHaveProperty('aHead');
+    expect(b).not.toHaveProperty('aTail');
+  });
+});
+
+describe('appendNode / prependNode', () => {
   test('mixed append and prepend keep the list consistent', () => {
     const owner: OwnerA = {};
     const [a, b, c, d, e] = ['a', 'b', 'c', 'd', 'e'].map(node) as [Node, Node, Node, Node, Node];
@@ -412,42 +419,50 @@ describe('addNew', () => {
   });
 
   describe('already linked nodes are rejected', () => {
-    test.each([EAddType.append, EAddType.prepend])('%s: head of a multi-node list', (addType) => {
+    test.each(ADDERS)('%s: head of a multi-node list', (_, add) => {
       const owner: OwnerA = {};
       const [a, b] = [node('a'), node('b')];
       linkA(owner, [a, b]);
 
-      expect(() => addNew(a, owner, addType, 'prevA', 'nextA', 'aHead', 'aTail')).toThrow(ALREADY_LINKED);
+      expect(() => add(a, owner)).toThrow(ALREADY_LINKED);
       expectListA(owner, [a, b]);
     });
 
-    test.each([EAddType.append, EAddType.prepend])('%s: tail of a multi-node list', (addType) => {
+    test.each(ADDERS)('%s: tail of a multi-node list', (_, add) => {
       const owner: OwnerA = {};
       const [a, b] = [node('a'), node('b')];
       linkA(owner, [a, b]);
 
-      expect(() => addNew(b, owner, addType, 'prevA', 'nextA', 'aHead', 'aTail')).toThrow(ALREADY_LINKED);
+      expect(() => add(b, owner)).toThrow(ALREADY_LINKED);
       expectListA(owner, [a, b]);
     });
 
-    test.each([EAddType.append, EAddType.prepend])('%s: middle node', (addType) => {
+    test.each(ADDERS)('%s: middle node', (_, add) => {
       const owner: OwnerA = {};
       const [a, b, c] = [node('a'), node('b'), node('c')];
       linkA(owner, [a, b, c]);
 
-      expect(() => addNew(b, owner, addType, 'prevA', 'nextA', 'aHead', 'aTail')).toThrow(ALREADY_LINKED);
+      expect(() => add(b, owner)).toThrow(ALREADY_LINKED);
       expectListA(owner, [a, b, c]);
     });
 
-    test.each([EAddType.append, EAddType.prepend])('%s: only node of the same owner (no self-loop)', (addType) => {
+    test.each(ADDERS)('%s: only node of the same owner (no self-loop)', (_, add) => {
       const owner: OwnerA = {};
       const a = node('a');
       appendA(a, owner);
 
-      expect(() => addNew(a, owner, addType, 'prevA', 'nextA', 'aHead', 'aTail')).toThrow(ALREADY_LINKED);
+      expect(() => add(a, owner)).toThrow(ALREADY_LINKED);
       expectListA(owner, [a]);
-      expect(a.nextA).toBeUndefined();
-      expect(a.prevA).toBeUndefined();
+      expectDetachedA(a);
+    });
+
+    test('error message names the function that threw', () => {
+      const owner: OwnerA = {};
+      const a = node('a');
+      appendA(a, owner);
+
+      expect(() => appendA(a, owner)).toThrow('[appendNode]');
+      expect(() => prependA(a, owner)).toThrow('[prependNode]');
     });
 
     test('node linked into another owner of the same chain is rejected', () => {
@@ -478,7 +493,7 @@ describe('addNew', () => {
       expectListA(owner, [a, c, b]);
     });
 
-    test('building with addNew then draining with unlink empties the list', () => {
+    test('building with append/prepend then draining with unlink empties the list', () => {
       const owner: OwnerA = {};
       const [a, b, c] = [node('a'), node('b'), node('c')];
       appendA(b, owner);
@@ -497,34 +512,32 @@ describe('addNew', () => {
     });
   });
 
-  describe('independent link sets', () => {
-    test('a node can sit in list A and list B at the same time', () => {
-      const ownerA: OwnerA = {};
-      const ownerB: OwnerB = {};
-      const [a, b] = [node('a'), node('b')];
+  test('a node can sit in list A and list B at the same time', () => {
+    const ownerA: OwnerA = {};
+    const ownerB: OwnerB = {};
+    const [a, b] = [node('a'), node('b')];
 
-      appendA(a, ownerA);
-      appendA(b, ownerA);
-      addNew(b, ownerB, EAddType.append, 'prevB', 'nextB', 'bHead', 'bTail');
-      addNew(a, ownerB, EAddType.append, 'prevB', 'nextB', 'bHead', 'bTail');
+    appendA(a, ownerA);
+    appendA(b, ownerA);
+    appendNode(b, ownerB, 'prevB', 'nextB', 'bHead', 'bTail');
+    prependNode(a, ownerB, 'prevB', 'nextB', 'bHead', 'bTail');
 
-      expectListA(ownerA, [a, b]);
-      expect(ownerB.bHead).toBe(b);
-      expect(ownerB.bTail).toBe(a);
-      expect(b.nextB).toBe(a);
-      expect(a.prevB).toBe(b);
-      expect(b.prevB).toBeUndefined();
-      expect(a.nextB).toBeUndefined();
-    });
+    expectListA(ownerA, [a, b]);
+    expect(ownerB.bHead).toBe(a);
+    expect(ownerB.bTail).toBe(b);
+    expect(a.nextB).toBe(b);
+    expect(b.prevB).toBe(a);
+    expect(a.prevB).toBeUndefined();
+    expect(b.nextB).toBeUndefined();
   });
 
   test('owner with bare `head` / `tail` keys', () => {
     const owner: PlainOwner = {};
     const [a, b, c] = [node('a'), node('b'), node('c')];
 
-    addNew(b, owner, EAddType.append, 'prevA', 'nextA', 'head', 'tail');
-    addNew(c, owner, EAddType.append, 'prevA', 'nextA', 'head', 'tail');
-    addNew(a, owner, EAddType.prepend, 'prevA', 'nextA', 'head', 'tail');
+    appendNode(b, owner, 'prevA', 'nextA', 'head', 'tail');
+    appendNode(c, owner, 'prevA', 'nextA', 'head', 'tail');
+    prependNode(a, owner, 'prevA', 'nextA', 'head', 'tail');
 
     expect(owner.head).toBe(a);
     expect(owner.tail).toBe(c);
@@ -537,14 +550,159 @@ describe('addNew', () => {
   test('key constraints (type-level)', () => {
     const typeChecks = (n: Node, o: OwnerA) => {
       // valid
-      addNew(n, o, EAddType.append, 'prevA', 'nextA', 'aHead', 'aTail');
+      appendNode(n, o, 'prevA', 'nextA', 'aHead', 'aTail');
+      prependNode(n, o, 'prevA', 'nextA', 'aHead', 'aTail');
 
-      // @ts-expect-error add type must be `append` or `prepend`
-      addNew(n, o, 'insert', 'prevA', 'nextA', 'aHead', 'aTail');
       // @ts-expect-error prev key must start with `prev`
-      addNew(n, o, EAddType.append, 'nextA', 'nextA', 'aHead', 'aTail');
+      appendNode(n, o, 'nextA', 'nextA', 'aHead', 'aTail');
       // @ts-expect-error head key must end with `Head`
-      addNew(n, o, EAddType.append, 'prevA', 'nextA', 'aTail', 'aTail');
+      prependNode(n, o, 'prevA', 'nextA', 'aTail', 'aTail');
+      // @ts-expect-error endpoint keys belong to a different owner
+      appendNode(n, o, 'prevA', 'nextA', 'bHead', 'bTail');
+    };
+
+    expect(typeof typeChecks).toBe('function');
+  });
+});
+
+describe('buildLinkMethods', () => {
+  /** Owner holding two lists of different node types, to prove `X` is derived from the head key. */
+  interface Item {
+    value: number;
+    prevItem?: Item;
+    nextItem?: Item;
+  }
+
+  interface MixedOwner {
+    aHead?: Node;
+    aTail?: Node;
+    itemHead?: Item;
+    itemTail?: Item;
+    count: number;
+  }
+
+  const listA = buildLinkMethods<OwnerA>()('aHead', 'aTail', 'prevA', 'nextA');
+
+  test('append / prepend / remove drive the bound list', () => {
+    const owner: OwnerA = {};
+    const [a, b, c, d] = ['a', 'b', 'c', 'd'].map(node) as [Node, Node, Node, Node];
+
+    listA.append(b, owner);
+    listA.append(c, owner);
+    listA.prepend(a, owner);
+    listA.append(d, owner);
+    expectListA(owner, [a, b, c, d]);
+
+    listA.remove(b, owner);
+    expectListA(owner, [a, c, d]);
+    expectDetachedA(b);
+
+    listA.remove(a, owner);
+    listA.remove(d, owner);
+    expectListA(owner, [c]);
+
+    listA.remove(c, owner);
+    expectListA(owner, []);
+  });
+
+  test('one set of methods is shared across owners', () => {
+    const ownerX: OwnerA = {};
+    const ownerY: OwnerA = {};
+    const [a, b, c] = [node('a'), node('b'), node('c')];
+
+    listA.append(a, ownerX);
+    listA.append(b, ownerY);
+    listA.prepend(c, ownerY);
+
+    expectListA(ownerX, [a]);
+    expectListA(ownerY, [c, b]);
+  });
+
+  test('behaves the same as the underlying functions', () => {
+    const owner: OwnerA = {};
+    const [a, b] = [node('a'), node('b')];
+    listA.append(a, owner);
+
+    expect(() => listA.append(a, owner)).toThrow('[appendNode]');
+    expect(() => listA.prepend(a, owner)).toThrow('[prependNode]');
+
+    listA.remove(a, owner);
+    listA.remove(a, owner); // already detached: no-op
+    expectListA(owner, []);
+
+    listA.append(b, owner);
+    expectListA(owner, [b]);
+  });
+
+  test('lists on the same owner stay independent', () => {
+    const owner: MixedOwner = { count: 0 };
+    const nodes = buildLinkMethods<MixedOwner>()('aHead', 'aTail', 'prevA', 'nextA');
+    const items = buildLinkMethods<MixedOwner>()('itemHead', 'itemTail', 'prevItem', 'nextItem');
+    const [a, b] = [node('a'), node('b')];
+    const [one, two]: Item[] = [{ value: 1 }, { value: 2 }];
+
+    nodes.append(a, owner);
+    items.append(one, owner);
+    nodes.append(b, owner);
+    items.prepend(two, owner);
+
+    expectListA(owner, [a, b]);
+    expect(owner.itemHead).toBe(two);
+    expect(owner.itemTail).toBe(one);
+    expect(two.nextItem).toBe(one);
+    expect(one.prevItem).toBe(two);
+
+    items.remove(two, owner);
+    expect(owner.itemHead).toBe(one);
+    expectListA(owner, [a, b]);
+    expect(owner.count).toBe(0);
+  });
+
+  test('owner with bare `head` / `tail` keys', () => {
+    const owner: PlainOwner = {};
+    const methods = buildLinkMethods<PlainOwner>()('head', 'tail', 'prevB', 'nextB');
+    const [a, b] = [node('a'), node('b')];
+
+    methods.append(b, owner);
+    methods.prepend(a, owner);
+
+    expect(owner.head).toBe(a);
+    expect(owner.tail).toBe(b);
+    expect(a.nextB).toBe(b);
+    expect(b.prevB).toBe(a);
+    expect(a.prevA).toBeUndefined();
+  });
+
+  /**
+   * Compile-time contract: the node type is inferred from the head key, so each method only accepts
+   * that node type, and every key must match it. `tsc` fails on an unused `@ts-expect-error`.
+   */
+  test('node type inference and key constraints (type-level)', () => {
+    const typeChecks = (n: Node, item: Item, o: MixedOwner) => {
+      const nodes = buildLinkMethods<MixedOwner>()('aHead', 'aTail', 'prevA', 'nextA');
+      const items = buildLinkMethods<MixedOwner>()('itemHead', 'itemTail', 'prevItem', 'nextItem');
+
+      // valid
+      nodes.append(n, o);
+      items.prepend(item, o);
+
+      // @ts-expect-error `nodes` was inferred as a list of `Node`, not `Item`
+      nodes.append(item, o);
+      // @ts-expect-error `items` was inferred as a list of `Item`, not `Node`
+      items.remove(n, o);
+      // @ts-expect-error owner must be the bound owner type
+      nodes.append(n, {} as OwnerB);
+
+      // @ts-expect-error head key must end with `Head`
+      buildLinkMethods<MixedOwner>()('aTail', 'aTail', 'prevA', 'nextA');
+      // @ts-expect-error non-node field is not a head key
+      buildLinkMethods<MixedOwner>()('count', 'aTail', 'prevA', 'nextA');
+      // @ts-expect-error tail key belongs to a different node type than the head key
+      buildLinkMethods<MixedOwner>()('aHead', 'itemTail', 'prevA', 'nextA');
+      // @ts-expect-error prev key must exist on the inferred node type
+      buildLinkMethods<MixedOwner>()('itemHead', 'itemTail', 'prevA', 'nextItem');
+      // @ts-expect-error next key must start with `next`
+      buildLinkMethods<MixedOwner>()('aHead', 'aTail', 'prevA', 'prevA');
     };
 
     expect(typeof typeChecks).toBe('function');

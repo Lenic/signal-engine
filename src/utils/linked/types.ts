@@ -18,8 +18,4 @@ export type TLinkedOwner<O extends object, T extends object> = {
   [K in TEndpointKey<O, T, 'Head'> | TEndpointKey<O, T, 'Tail'>]: TLinkedNode<T> | undefined;
 };
 
-export const EAddType = {
-  prepend: 'prepend',
-  append: 'append',
-} as const;
-export type EAddType = (typeof EAddType)[keyof typeof EAddType];
+export type TNodeOf<O, H extends keyof O> = Extract<NonNullable<O[H]>, object>;
