@@ -5,14 +5,15 @@ import { globalContext } from './context';
 import { Disposable } from './disposable';
 
 export abstract class Runnable<T extends Runnable<T>> extends Disposable implements IRunnable {
-  private _name?: string;
-  private _runId: number;
   private _isInitialized: boolean;
 
-  private _ownNode?: ILinked<IDisposable>;
   private _owner?: IEffectOwner;
+  private _ownNode?: ILinked<IDisposable>;
 
-  protected _isSelfRunning: boolean;
+  protected isSelfRunning: boolean;
+
+  name?: string;
+  runId: number;
 
   connectibleHead?: IConnector;
   connectibleTail?: IConnector;
@@ -26,10 +27,11 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
     this.connectibleTail = undefined;
     this.connectibleCurrent = undefined;
 
-    this._runId = 0;
-    this._name = name;
+    this.runId = 0;
+    this.name = name;
+
     this._isInitialized = false;
-    this._isSelfRunning = false;
+    this.isSelfRunning = false;
 
     this._owner = globalContext.activeOwner;
     this._ownNode = globalContext.activeOwner?.adopt(this);
@@ -37,46 +39,9 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
 
   abstract markDirty(): IConnector | undefined;
 
-  get name(): string | undefined {
-    return this._name;
-  }
-
-  get runId(): number {
-    return this._runId;
-  }
-
-  protected execute<TResult = void, TDefaultValue = void>(
-    action: IAction<[context: T], TResult>,
-    defalutValue: TDefaultValue,
-  ): TResult | TDefaultValue {
-    this.assertNotDisposed();
-
-    if (this._isSelfRunning) {
-      throw new Error('[Runnable]: Cannot run iteratively.');
-    }
-    this._isSelfRunning = true;
-
-    const previousActiveEffect = globalContext.activeEffect;
-    const previousIsEffectRunning = globalContext.isEffectRunning;
-    globalContext.activeEffect = this;
-    globalContext.isEffectRunning = true;
-
-    try {
-      if (!this.hasDependenciesChanged()) return defalutValue;
-      if (this.isDisposed) return defalutValue;
-
-      return this.runAction(action);
-    } finally {
-      this._isSelfRunning = false;
-
-      globalContext.activeEffect = previousActiveEffect;
-      globalContext.isEffectRunning = previousIsEffectRunning;
-    }
-  }
-
   disposeWithErrorContext(): void {
     this._isInitialized = false;
-    this._isSelfRunning = false;
+    this.isSelfRunning = false;
 
     if (this._ownNode && this._owner) {
       childrenMethods.remove(this._ownNode, this._owner);
@@ -92,8 +57,45 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
     }
   }
 
-  private runAction<TResult>(action: IAction<[context: T], TResult>): TResult {
-    this._runId += 1;
+  protected isUpToDate(): boolean {
+    if (!this._isInitialized) return false;
+
+    let node = this.connectibleHead;
+    while (node) {
+      if (node.connectibleVersion !== node.connectible.version) return false;
+      node = node.nextConnectible;
+    }
+
+    return true;
+  }
+
+  protected execute<TResult = void>(action: IAction<[context: T], TResult>): TResult {
+    this.assertNotDisposed();
+
+    if (this.isSelfRunning) {
+      throw new Error('[Runnable]: Cannot run iteratively.');
+    }
+
+    this.isSelfRunning = true;
+    this._isInitialized = true;
+
+    const previousActiveEffect = globalContext.activeEffect;
+    const previousIsEffectRunning = globalContext.isEffectRunning;
+    globalContext.activeEffect = this;
+    globalContext.isEffectRunning = true;
+
+    try {
+      return this.runAction(action);
+    } finally {
+      this.isSelfRunning = false;
+
+      globalContext.activeEffect = previousActiveEffect;
+      globalContext.isEffectRunning = previousIsEffectRunning;
+    }
+  }
+
+  private runAction<TResult = void>(action: IAction<[context: T], TResult>): TResult {
+    this.runId += 1;
     this.connectibleCurrent = this.connectibleHead;
     const result = action(this as unknown as T);
     this.clearConnnectsTail();
@@ -107,20 +109,5 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
       node.dispose();
       node = next;
     }
-  }
-
-  private hasDependenciesChanged(): boolean {
-    if (!this._isInitialized) {
-      this._isInitialized = true;
-      return true;
-    }
-
-    let node = this.connectibleHead;
-    while (node) {
-      if (node.connectibleVersion !== node.connectible.version) return true;
-      node = node.nextConnectible;
-    }
-
-    return false;
   }
 }

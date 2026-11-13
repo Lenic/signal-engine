@@ -47,24 +47,25 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
   run() {
     this.assertNotDisposed();
 
-    if (this._isSelfRunning) {
+    if (this.isSelfRunning) {
       this._needsToPushToQueue = true;
       return;
     }
+
+    if (this.isUpToDate() || this.isDisposed) return;
 
     this.releaseChildren();
 
     const previousActiveOwner = globalContext.activeOwner;
     globalContext.activeOwner = this;
     try {
-      this.execute(EffectAction.runAction, undefined);
+      this.execute(EffectAction.runAction);
     } finally {
       globalContext.activeOwner = previousActiveOwner;
 
       if (this._needsToPushToQueue) {
         this._needsToPushToQueue = false;
 
-        // fire consumeTail method of the global-context file.
         if (BatchScope.isBatching) {
           this.markDirty();
         } else {

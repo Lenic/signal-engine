@@ -2,7 +2,6 @@ import type { IAction, IConnector, IMemoValue, IRunnable, IValueOptions } from '
 
 import { globalContext } from './context';
 import { Runnable } from './runnable';
-import { notifyDirty } from './utils';
 
 const defaultValue = Symbol('default_memo_value');
 
@@ -79,10 +78,12 @@ export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T
 
   private refreshValue() {
     if (this._hasBeenRead || this.isDisposed) return;
-
     this._hasBeenRead = true;
-    const newValue = this.execute(this._getter, defaultValue);
-    if (newValue !== defaultValue && !this.equal(newValue)) {
+
+    if (this.isUpToDate() || this.isDisposed) return;
+
+    const newValue = this.execute(this._getter);
+    if (!this.equal(newValue)) {
       this._value = newValue;
       this._version += 1;
     }

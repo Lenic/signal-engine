@@ -685,7 +685,6 @@ describe('6. Dispose: stop reacting and release dependencies', () => {
 
   describe('6.5 a disposed effect is detached from the sources it read', () => {
     test('6.5.1 every source drops the effect and the effect drops every source', () => {
-      debugger;
       const s = new SignalValue(1);
       const other = new SignalValue(10);
       const m = new MemoValue(() => s.value * 2);
@@ -726,6 +725,44 @@ describe('6. Dispose: stop reacting and release dependencies', () => {
       s.setValue(2);
       expect(runCount).toBe(100);
     });
+  });
+
+  test('6.6 a parent effect skipped because its dependencies did not change keeps its children alive', () => {
+    const s = new SignalValue(1);
+    const other = new SignalValue(0);
+    // 1 -> 3 keeps the parity, so the parent is notified but its dependency version stays the same.
+    const parity = new MemoValue(() => s.value % 2);
+
+    let parentRuns = 0;
+    let childRuns = 0;
+    let childCleanups = 0;
+
+    new EffectAction(() => {
+      parentRuns++;
+      void parity.value;
+
+      new EffectAction(() => {
+        childRuns++;
+        void other.value;
+        return () => {
+          childCleanups++;
+        };
+      });
+    });
+
+    expect(parentRuns).toBe(1);
+    expect(childRuns).toBe(1);
+
+    s.setValue(3);
+    // The parent was marked dirty, but nothing it read has changed, so it must not re-run...
+    expect(parentRuns).toBe(1);
+    // ...and therefore must not release the child it created in the previous run.
+    expect(childCleanups).toBe(0);
+
+    // The child is still alive and keeps reacting to its own dependency.
+    other.setValue(1);
+    expect(childRuns).toBe(2);
+    expect(childCleanups).toBe(1);
   });
 });
 
