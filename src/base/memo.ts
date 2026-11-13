@@ -1,12 +1,8 @@
-import type { ILinkedList, ILinkedNode } from '../utils';
-
-import type { IAction, IConnectManager, IDirtyMarkable, IMemoValue, IValueOptions } from './types';
-
-import { LinkedList } from '../utils';
+import type { IAction, IConnector, IMemoValue, IRunnable, IValueOptions } from './types';
 
 import { globalContext } from './context';
 import { Runnable } from './runnable';
-import { notifyListeners, notifyDirty } from './utils';
+import { notifyDirty } from './utils';
 
 const defaultValue = Symbol('default_memo_value');
 
@@ -16,17 +12,20 @@ export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T
   private _getter: IAction<[], T>;
   private _value: T | typeof defaultValue;
   private _comparer?: IAction<[T, T], boolean>;
-  private _listeners?: ILinkedList<IDirtyMarkable> | undefined;
 
   lastRunId?: number;
-  lastInstance?: IConnectManager;
+  lastRunnable?: IRunnable;
+
+  runnableHead?: IConnector;
+  runnableTail?: IConnector;
 
   constructor(getter: IAction<[], T>, options?: IValueOptions<T>) {
     super(options?.name);
 
     this.lastRunId = undefined;
-    this._listeners = undefined;
-    this.lastInstance = undefined;
+    this.lastRunnable = undefined;
+    this.runnableHead = undefined;
+    this.runnableTail = undefined;
 
     this._version = 0;
     this._hasBeenRead = false;
@@ -53,34 +52,29 @@ export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T
     return this._version;
   }
 
-  get listeners(): ILinkedList<IDirtyMarkable> | undefined {
-    return this._listeners;
-  }
-
-  addChangeListener(listener: IDirtyMarkable): ILinkedNode<IDirtyMarkable> {
-    this.assertNotDisposed();
-
-    return (this._listeners ??= new LinkedList<IDirtyMarkable>()).append(listener);
-  }
-
   markDirty(): void {
     this.assertNotDisposed();
 
     if (!this._hasBeenRead) return;
     this._hasBeenRead = false;
 
-    notifyDirty(this._listeners);
+    notifyDirty(this.runnableHead);
   }
 
-  dispose(): void {
-    if (this.isDisposed) return;
-
-    super.dispose();
-
+  disposeWithErrorContext(): void {
     this._getter = undefined as unknown as IAction<[], T>;
 
-    notifyListeners(this._listeners, null);
-    this._listeners = undefined;
+    let node1 = this.connectibleHead;
+    while (node1) {
+      node1.dispose();
+      node1 = this.connectibleHead;
+    }
+
+    let node2 = this.runnableHead;
+    while (node2) {
+      node2.dispose();
+      node2 = this.runnableHead;
+    }
   }
 
   private refreshValue() {

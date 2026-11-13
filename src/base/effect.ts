@@ -1,44 +1,47 @@
-import type { IDisposable, ILinkedList, ILinkedNode } from '../utils';
-
-import type { IAction, IEffectAction, INamedObject } from './types';
-
-import { LinkedList } from '../utils';
+import type { IAction, IDisposable, IEffectAction, ILinked, INamedObject } from './types';
 
 import { BatchScope } from './batch';
+import { childrenMethods } from './constants';
 import { globalContext } from './context';
+import { ErrorScope } from './error';
 import { Runnable } from './runnable';
-import { notifyListeners } from './utils';
 
 export class EffectAction extends Runnable<EffectAction> implements IEffectAction {
   private _customCleanup?: IAction;
   private _needsToPushToQueue: boolean;
   private _action: IAction<[], void | IAction>;
-  private _children?: ILinkedList<IDisposable>;
-  private _queueNode?: ILinkedNode<IEffectAction>;
+
+  isEnqueued: boolean;
+
+  childrenHead?: ILinked<IDisposable>;
+  childrenTail?: ILinked<IDisposable>;
 
   constructor(action: IAction<[], void | IAction>, options?: INamedObject) {
     super(options?.name);
 
-    this._children = undefined;
-    this._queueNode = undefined;
+    this.childrenHead = undefined;
+    this.childrenTail = undefined;
     this._customCleanup = undefined;
 
     this._action = action;
     this._needsToPushToQueue = false;
 
+    this.isEnqueued = false;
+
     this.run();
   }
 
-  adopt(disposable: IDisposable): ILinkedNode<IDisposable> {
-    return (this._children ??= new LinkedList<IDisposable>()).append(disposable);
+  adopt(disposable: IDisposable): ILinked<IDisposable> {
+    const node: ILinked<IDisposable> = { value: disposable, prev: undefined, next: undefined };
+    childrenMethods.append(node, this);
+    return node;
   }
 
   markDirty(): void {
-    if (!globalContext.isEffectRunning && !BatchScope.isBatching) {
-      this.run();
-    } else {
-      this.pushToQueue();
-    }
+    if (this.isEnqueued) return;
+
+    this.isEnqueued = true;
+    globalContext.effectList.push(this);
   }
 
   run() {
@@ -62,41 +65,61 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
         this._needsToPushToQueue = false;
 
         // fire consumeTail method of the global-context file.
-        const level = BatchScope.begin();
-        try {
-          this.pushToQueue();
-        } finally {
-          BatchScope.end(level);
+        if (BatchScope.isBatching) {
+          this.markDirty();
+        } else {
+          const level = BatchScope.begin();
+          try {
+            this.markDirty();
+          } finally {
+            BatchScope.end(level);
+          }
         }
       }
     }
   }
 
-  dispose(): void {
-    if (this.isDisposed) return;
-
-    super.dispose();
-
+  disposeWithErrorContext(): void {
+    this.isEnqueued = false;
     this._action = undefined as unknown as IAction;
 
-    this._queueNode?.removeSelf();
-    this._queueNode = undefined;
+    try {
+      this.runCustomCleanup();
+    } catch (e) {
+      ErrorScope.record(e);
+    }
 
-    this.releaseChildren();
-    this._children = undefined;
-
-    this.runCustomCleanup();
-  }
-
-  private pushToQueue() {
-    if (this._queueNode) return;
-
-    this._queueNode = globalContext.effectList.append(this);
-    this._queueNode.onBeforeClear = EffectAction.releaseQueueNode;
+    try {
+      this.releaseChildren();
+    } catch (e) {
+      ErrorScope.record(e);
+    }
   }
 
   private releaseChildren() {
-    notifyListeners(this._children, EffectAction.releaseItem);
+    let node = this.childrenHead;
+    if (!node) return;
+
+    const batchLevel = BatchScope.isBatching ? null : BatchScope.begin();
+    const errorLevel = ErrorScope.isActive ? null : ErrorScope.begin();
+
+    try {
+      while (node) {
+        try {
+          childrenMethods.remove(node, this);
+          node.value.dispose();
+        } catch (e) {
+          ErrorScope.record(e);
+        }
+        node = this.childrenHead;
+      }
+    } finally {
+      try {
+        if (errorLevel !== null) ErrorScope.end(errorLevel);
+      } finally {
+        if (batchLevel !== null) BatchScope.end(batchLevel);
+      }
+    }
   }
 
   private runCustomCleanup() {
@@ -118,13 +141,5 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
     if (typeof result === 'function') {
       ctx._customCleanup = result;
     }
-  }
-
-  private static releaseQueueNode(node: ILinkedNode<IEffectAction>): void {
-    (node.value as EffectAction)._queueNode = undefined;
-  }
-
-  private static releaseItem(disposable: IDisposable): void {
-    disposable.dispose();
   }
 }

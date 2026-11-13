@@ -1,32 +1,37 @@
-import type { IDisposable, ILinkedList, ILinkedNode } from '../utils';
+import type { IAction, IConnector, IDisposable, IEffectOwner, ILinked, IRunnable } from './types';
 
-import type { IAction, IRunnable, ISnapshot } from './types';
-
-import { Disposable, LinkedList } from '../utils';
-
+import { childrenMethods } from './constants';
 import { globalContext } from './context';
+import { Disposable } from './disposable';
 
 export abstract class Runnable<T extends Runnable<T>> extends Disposable implements IRunnable {
   private _name?: string;
   private _runId: number;
   private _isInitialized: boolean;
-  private _ownNode?: ILinkedNode<IDisposable>;
-  private _connectors: ILinkedList<ISnapshot>;
+
+  private _ownNode?: ILinked<IDisposable>;
+  private _owner?: IEffectOwner;
 
   protected _isSelfRunning: boolean;
 
-  currentConnect?: ILinkedNode<ISnapshot> | null;
+  connectibleHead?: IConnector;
+  connectibleTail?: IConnector;
+
+  connectibleCurrent?: IConnector;
 
   constructor(name?: string) {
     super();
 
-    this.currentConnect = null;
+    this.connectibleHead = undefined;
+    this.connectibleTail = undefined;
+    this.connectibleCurrent = undefined;
 
     this._runId = 0;
     this._name = name;
     this._isInitialized = false;
     this._isSelfRunning = false;
-    this._connectors = new LinkedList<ISnapshot>();
+
+    this._owner = globalContext.activeOwner;
     this._ownNode = globalContext.activeOwner?.adopt(this);
   }
 
@@ -38,10 +43,6 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
 
   get runId(): number {
     return this._runId;
-  }
-
-  get connectors(): ILinkedList<ISnapshot> {
-    return this._connectors;
   }
 
   protected execute<TResult = void, TDefaultValue = void>(
@@ -74,40 +75,37 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
     }
   }
 
-  dispose(): void {
-    if (this.isDisposed) return;
-
-    super.dispose();
-
+  disposeWithErrorContext(): void {
     this._isInitialized = false;
     this._isSelfRunning = false;
 
-    this._ownNode?.removeSelf();
-    this._ownNode = undefined;
+    if (this._ownNode && this._owner) {
+      childrenMethods.remove(this._ownNode, this._owner);
 
-    this.currentConnect = null;
-    let node = this._connectors.head;
-    while (node) {
-      node.value.node.removeSelf();
-      node.removeSelf();
-      node = this._connectors.head;
+      this._owner = undefined;
+      this._ownNode = undefined;
     }
-    this._connectors = undefined as unknown as ILinkedList<ISnapshot>;
+
+    let node = this.connectibleHead;
+    while (node) {
+      node.dispose();
+      node = this.connectibleHead;
+    }
   }
 
   private runAction<TResult>(action: IAction<[context: T], TResult>): TResult {
     this._runId += 1;
-    this.currentConnect = this._connectors.head;
+    this.connectibleCurrent = this.connectibleHead;
     const result = action(this as unknown as T);
     this.clearConnnectsTail();
     return result;
   }
 
   private clearConnnectsTail() {
-    let node = this.currentConnect;
+    let node = this.connectibleCurrent;
     while (node) {
-      const next = node.next;
-      node.removeSelf();
+      const next = node.nextConnectible;
+      node.dispose();
       node = next;
     }
   }
@@ -118,11 +116,10 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
       return true;
     }
 
-    let node = this._connectors.head;
+    let node = this.connectibleHead;
     while (node) {
-      const { value } = node;
-      if (value.version !== value.instance.version) return true;
-      node = node.next;
+      if (node.connectibleVersion !== node.connectible.version) return true;
+      node = node.nextConnectible;
     }
 
     return false;

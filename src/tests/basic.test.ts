@@ -1,9 +1,29 @@
+import type { IConnectible, IRunnable } from '../base/types';
+
 import { describe, expect, test } from 'vitest';
 
 import { BatchScope } from '../base/batch';
 import { EffectAction } from '../base/effect';
 import { MemoValue } from '../base/memo';
 import { SignalValue } from '../base/signal';
+
+/** The sources a runnable depends on, in tracking order (walks its `connectibleHead` list). */
+function sourcesOf(target: IRunnable): IConnectible[] {
+  const sources: IConnectible[] = [];
+  for (let node = target.connectibleHead; node; node = node.nextConnectible) {
+    sources.push(node.connectible);
+  }
+  return sources;
+}
+
+/** How many runnables are subscribed to a source (walks its `runnableHead` list). */
+function readerCountOf(source: IConnectible): number {
+  let count = 0;
+  for (let node = source.runnableHead; node; node = node.nextRunnable) {
+    count += 1;
+  }
+  return count;
+}
 
 describe('1. Signal: read, write and equality', () => {
   test('1.1 basic read and write', () => {
@@ -282,14 +302,6 @@ describe('4. Propagation: memo chains and diamonds', () => {
 });
 
 describe('5. Dependency tracking: the same source read more than once', () => {
-  const sourcesOf = (target: { connectors: EffectAction['connectors'] }) => {
-    const sources: unknown[] = [];
-    for (let node = target.connectors.head; node; node = node.next) {
-      sources.push(node.value.instance);
-    }
-    return sources;
-  };
-
   test('5.1 reading the same source repeatedly in one run subscribes only once', () => {
     const s = new SignalValue(1);
     let runCount = 0;
@@ -301,13 +313,13 @@ describe('5. Dependency tracking: the same source read more than once', () => {
 
     expect(runCount).toBe(1);
     expect(sourcesOf(e)).toEqual([s]);
-    expect(s.listeners?.size).toBe(1);
+    expect(readerCountOf(s)).toBe(1);
 
     // a duplicated listener would not break the run count, so the shape must be checked as well
     s.setValue(2);
     expect(runCount).toBe(2);
     expect(sourcesOf(e)).toEqual([s]);
-    expect(s.listeners?.size).toBe(1);
+    expect(readerCountOf(s)).toBe(1);
   });
 
   test('5.2 interleaved reads (a, b, a) keep the first position of each source', () => {
@@ -321,14 +333,14 @@ describe('5. Dependency tracking: the same source read more than once', () => {
 
     expect(seen).toEqual([12]);
     expect(sourcesOf(e)).toEqual([a, b]);
-    expect(a.listeners?.size).toBe(1);
-    expect(b.listeners?.size).toBe(1);
+    expect(readerCountOf(a)).toBe(1);
+    expect(readerCountOf(b)).toBe(1);
 
     a.setValue(2);
     expect(seen).toEqual([12, 14]);
     expect(sourcesOf(e)).toEqual([a, b]);
-    expect(a.listeners?.size).toBe(1);
-    expect(b.listeners?.size).toBe(1);
+    expect(readerCountOf(a)).toBe(1);
+    expect(readerCountOf(b)).toBe(1);
 
     b.setValue(20);
     expect(seen).toEqual([12, 14, 24]);
@@ -380,8 +392,8 @@ describe('5. Dependency tracking: the same source read more than once', () => {
     flag.setValue(false);
     expect(runCount).toBe(2);
     expect(sourcesOf(e)).toEqual([flag, b, a]);
-    expect(a.listeners?.size).toBe(1);
-    expect(b.listeners?.size).toBe(1);
+    expect(readerCountOf(a)).toBe(1);
+    expect(readerCountOf(b)).toBe(1);
 
     a.setValue(2);
     expect(runCount).toBe(3);
@@ -425,7 +437,7 @@ describe('5. Dependency tracking: the same source read more than once', () => {
       void (s.value + s.value);
     });
 
-    expect(s.listeners?.size).toBe(2);
+    expect(readerCountOf(s)).toBe(2);
 
     s.setValue(2);
     expect(countA).toBe(2);
@@ -444,11 +456,11 @@ describe('5. Dependency tracking: the same source read more than once', () => {
 
     expect(m.value).toBe(2);
     expect(sourcesOf(m)).toEqual([s]);
-    expect(s.listeners?.size).toBe(1);
+    expect(readerCountOf(s)).toBe(1);
 
     // overwriting the snapshot with the post-write version would hide the self-invalidation
-    expect(m.connectors.head!.value.version).toBe(versionBeforeWrite);
-    expect(m.connectors.head!.value.version).not.toBe(s.version);
+    expect(m.connectibleHead!.connectibleVersion).toBe(versionBeforeWrite);
+    expect(m.connectibleHead!.connectibleVersion).not.toBe(s.version);
   });
 
   test('5.8 a nested run tracking the same source in between does not break the outer tracking', () => {
@@ -544,6 +556,131 @@ describe('6. Dispose: stop reacting and release dependencies', () => {
     // After disposal, dependency link is severed, it should just return the last cached value
     expect(m.value).toBe(2);
     expect(runCount).toBe(1);
+  });
+
+  describe('6.4 a disposed memo is detached from its downstream effects', () => {
+    test('6.4.1 the memo drops its readers and the effect drops the memo', () => {
+      const s = new SignalValue(1);
+      const other = new SignalValue(10);
+      const m = new MemoValue(() => s.value * 2);
+      let runCount = 0;
+
+      const e = new EffectAction(() => {
+        runCount++;
+        void m.value;
+        void other.value;
+      });
+
+      expect(sourcesOf(e)).toEqual([m, other]);
+      expect(m.runnableHead?.runnable).toBe(e);
+
+      m.dispose();
+
+      expect(m.runnableHead).toBeUndefined();
+      expect(m.runnableTail).toBeUndefined();
+      expect(sourcesOf(e)).toEqual([other]);
+
+      // the upstream of the disposed memo no longer reaches the effect
+      expect(() => s.setValue(2)).not.toThrow();
+      expect(runCount).toBe(1);
+    });
+
+    test('6.4.2 the effect still reacts to its other dependencies', () => {
+      const s = new SignalValue(1);
+      const other = new SignalValue(10);
+      const m = new MemoValue(() => s.value * 2);
+      const seen: number[] = [];
+
+      const e = new EffectAction(() => {
+        seen.push(m.value + other.value);
+      });
+
+      m.dispose();
+      other.setValue(20);
+
+      // the disposed memo hands back its cached value, but must not be tracked again
+      expect(seen).toEqual([12, 22]);
+      expect(sourcesOf(e)).toEqual([other]);
+      expect(m.runnableHead).toBeUndefined();
+
+      s.setValue(5);
+      expect(seen).toEqual([12, 22]);
+    });
+
+    test('6.4.3 every downstream effect is detached, not only the first one', () => {
+      const s = new SignalValue(1);
+      const m = new MemoValue(() => s.value);
+      let runCount = 0;
+
+      const effects = [0, 1, 2].map(
+        () =>
+          new EffectAction(() => {
+            runCount++;
+            void m.value;
+          }),
+      );
+      expect(runCount).toBe(3);
+
+      m.dispose();
+
+      expect(m.runnableHead).toBeUndefined();
+      effects.forEach((e) => expect(sourcesOf(e)).toEqual([]));
+
+      s.setValue(2);
+      expect(runCount).toBe(3);
+    });
+
+    test('6.4.4 disposing the memo inside the effect, before the rest is re-read', () => {
+      const s = new SignalValue(1);
+      const other = new SignalValue(10);
+      const trigger = new SignalValue(0);
+      const m = new MemoValue(() => s.value);
+      const seen: number[] = [];
+
+      const e = new EffectAction(() => {
+        // on the re-run the memo connector is the one about to be reused
+        if (trigger.value === 1) m.dispose();
+        seen.push(other.value);
+        if (trigger.value === 0) void m.value;
+      });
+
+      expect(sourcesOf(e)).toEqual([trigger, other, m]);
+
+      trigger.setValue(1);
+      expect(seen).toEqual([10, 10]);
+      expect(sourcesOf(e)).toEqual([trigger, other]);
+
+      other.setValue(20);
+      expect(seen).toEqual([10, 10, 20]);
+    });
+
+    test('6.4.5 disposing the memo that the effect is about to reuse', () => {
+      const s = new SignalValue(1);
+      const other = new SignalValue(10);
+      const trigger = new SignalValue(0);
+      const m = new MemoValue(() => s.value);
+      const seen: number[] = [];
+
+      const e = new EffectAction(() => {
+        if (trigger.value === 0) {
+          void m.value;
+          seen.push(other.value);
+        } else {
+          // the memo connector sits right after `trigger`: it is `connectibleCurrent` here
+          m.dispose();
+          seen.push(other.value);
+        }
+      });
+
+      expect(sourcesOf(e)).toEqual([trigger, m, other]);
+
+      expect(() => trigger.setValue(1)).not.toThrow();
+      expect(seen).toEqual([10, 10]);
+      expect(sourcesOf(e)).toEqual([trigger, other]);
+
+      other.setValue(20);
+      expect(seen).toEqual([10, 10, 20]);
+    });
   });
 });
 

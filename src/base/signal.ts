@@ -1,38 +1,30 @@
-import type { ILinkedList, ILinkedNode } from '../utils';
-
-import type {
-  IAction,
-  IBatchSnapshot,
-  IConnectable,
-  IConnectManager,
-  IDirtyMarkable,
-  ISignalValue,
-  IValueOptions,
-} from './types';
-
-import { LinkedList } from '../utils';
+import type { IAction, IBatchSnapshot, IConnector, IRunnable, ISignalValue, IValueOptions } from './types';
 
 import { BatchScope } from './batch';
 import { globalContext } from './context';
 import { getClock, notifyDirty } from './utils';
 
-export class SignalValue<T> implements ISignalValue<T>, IConnectable {
+export class SignalValue<T> implements ISignalValue<T> {
   private _value: T;
   private _name?: string;
   private _version: number;
   private _hasBeenRead: boolean;
+  private _isQueuedForBatchResume: boolean;
   private _comparer?: IAction<[T, T], boolean>;
-  private _listeners?: ILinkedList<IDirtyMarkable>;
-  private _batchQueueNode?: ILinkedNode<IBatchSnapshot>;
 
   lastRunId?: number;
-  lastInstance?: IConnectManager;
+  lastRunnable?: IRunnable;
+
+  runnableHead?: IConnector;
+  runnableTail?: IConnector;
 
   constructor(value: T, options?: IValueOptions<T>) {
     this.lastRunId = undefined;
-    this._listeners = undefined;
-    this.lastInstance = undefined;
-    this._batchQueueNode = undefined;
+    this.lastRunnable = undefined;
+    this.runnableHead = undefined;
+    this.runnableTail = undefined;
+
+    this._isQueuedForBatchResume = false;
 
     this._version = 0;
     this._value = value;
@@ -57,25 +49,9 @@ export class SignalValue<T> implements ISignalValue<T>, IConnectable {
     return this._version;
   }
 
-  get listeners(): ILinkedList<IDirtyMarkable> | undefined {
-    return this._listeners;
-  }
-
-  addChangeListener(listener: IDirtyMarkable): ILinkedNode<IDirtyMarkable> {
-    return (this._listeners ??= new LinkedList<IDirtyMarkable>()).append(listener);
-  }
-
   setValue(newValue: T, force?: boolean): void {
     if (force || !this.equal(newValue)) {
-      if (BatchScope.isBatching && !this._batchQueueNode) {
-        this._batchQueueNode = globalContext.batchSnapshots.append({
-          instance: this as SignalValue<unknown>,
-          version: this._version,
-          value: this._value,
-          hasBeenRead: this._hasBeenRead,
-        });
-        this._batchQueueNode.onBeforeClear = SignalValue.releaseFromBatch;
-      }
+      this.addBatchSnapshot();
 
       this._version = getClock();
       this._value = newValue;
@@ -89,8 +65,20 @@ export class SignalValue<T> implements ISignalValue<T>, IConnectable {
        */
       if (this._hasBeenRead) {
         this._hasBeenRead = false;
-        notifyDirty(this._listeners);
+        notifyDirty(this.runnableHead);
       }
+    }
+  }
+
+  private addBatchSnapshot() {
+    if (BatchScope.isBatching && !this._isQueuedForBatchResume) {
+      globalContext.batchSnapshots.push({
+        instance: this as SignalValue<unknown>,
+        version: this._version,
+        value: this._value,
+        hasBeenRead: this._hasBeenRead,
+      });
+      this._isQueuedForBatchResume = true;
     }
   }
 
@@ -101,11 +89,10 @@ export class SignalValue<T> implements ISignalValue<T>, IConnectable {
     return this._comparer(this._value, target);
   }
 
-  private static releaseFromBatch(node: ILinkedNode<IBatchSnapshot>) {
-    const { instance, value, version, hasBeenRead } = node.value;
+  static restoreFromBatch({ instance, value, version, hasBeenRead }: IBatchSnapshot) {
     const target = instance as SignalValue<unknown>;
 
-    target._batchQueueNode = undefined;
+    target._isQueuedForBatchResume = false;
     if (target.equal(value)) {
       target._value = value;
       target._version = version;
