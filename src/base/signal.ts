@@ -52,7 +52,7 @@ export class SignalValue<T> implements ISignalValue<T> {
 
   get value(): T {
     this._hasBeenRead = true;
-    globalContext.track(this);
+    globalContext.track(this, this._version);
 
     return this._value;
   }

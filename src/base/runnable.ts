@@ -63,7 +63,6 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
 
     try {
       if (!this.hasDependenciesChanged()) return defalutValue;
-
       if (this.isDisposed) return defalutValue;
 
       return this.runAction(action);

@@ -41,7 +41,7 @@ export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T
       throw new Error('[MemoValue]: must return value from getter() method');
     }
 
-    globalContext.track(this);
+    globalContext.track(this, this._version);
     return this._value;
   }
 

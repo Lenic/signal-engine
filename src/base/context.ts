@@ -15,12 +15,11 @@ export const globalContext = {
   effectList: [] as IEffectAction[],
   batchSnapshots: [] as IBatchSnapshot[],
   activeEffect: undefined as IRunnable | undefined,
-  track(source: IConnectible): void {
+  track(source: IConnectible, sourceVersion: number): void {
     const effect = this.activeEffect;
     if (effect === undefined || effect.isDisposed || source.isDisposed) return;
 
     const runId = effect.runId;
-    const sourceVersion = source.version;
     const current = effect.connectibleCurrent;
 
     if (source.lastRunnable === effect && source.lastRunId === runId) return;
