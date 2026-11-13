@@ -23,14 +23,23 @@ artifact that actually ships.
 | effect create+dispose | subscription lifecycle churn |
 | batched writes | write coalescing |
 
-## Reading the output
+## How it measures
 
-Cells are milliseconds, median of `BENCH_SAMPLES` runs (7 by default), lower is better. Set the
-sample count with an environment variable:
+Every measurement is a **cold start**: each (scenario, library, round) pair runs in a brand-new
+`node` process (`measure.mjs`), with no warm-up and exactly one timed run. Nothing a previous run
+or another library did — JIT tiers, inline caches, shared call sites going megamorphic — can leak
+into the number. Within a round the jobs run in a shuffled order, so no library always follows
+the same neighbour.
+
+Each cell is run `BENCH_ROUNDS` times (5 by default). The fastest and slowest are dropped and the
+remaining runs are averaged. Cells are milliseconds, lower is better.
 
 ```bash
-BENCH_SAMPLES=15 pnpm bench
+BENCH_ROUNDS=9 pnpm bench   # must be >= 3
 ```
+
+Because the timed run is the first execution, these numbers include interpreter and baseline-JIT
+time. They describe startup and short-lived workloads, not a long-running steady state.
 
 Two things guard the numbers:
 

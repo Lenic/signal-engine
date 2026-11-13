@@ -1,17 +1,24 @@
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
 import { adapters } from './adapters.mjs';
 import { scenarios } from './scenarios.mjs';
 
-const SAMPLES = Number(process.env.BENCH_SAMPLES ?? 7);
+const ROUNDS = Number(process.env.BENCH_ROUNDS ?? 5);
+if (!Number.isInteger(ROUNDS) || ROUNDS < 3) {
+  console.error('BENCH_ROUNDS must be an integer >= 3 (the fastest and slowest runs are dropped).');
+  process.exit(1);
+}
 
-const now = () => Number(process.hrtime.bigint()) / 1e6;
-const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+const MEASURE = fileURLToPath(new URL('./measure.mjs', import.meta.url));
 const pad = (s, n) => String(s).padEnd(n);
 const padStart = (s, n) => String(s).padStart(n);
 
 /**
  * Runs every adapter through the same reactive graph before any timing is trusted. A library
  * whose adapter is subtly wrong - not tracking, not caching, not batching - would otherwise post
- * excellent numbers for doing less work.
+ * excellent numbers for doing less work. This runs in the parent process only, so it cannot warm
+ * up the measured runs.
  */
 function verifySemantics() {
   const expected = [
@@ -67,6 +74,20 @@ function verifySemantics() {
   return failures;
 }
 
+/** Sorts the samples, drops the fastest and the slowest, and averages the rest. */
+function trimmedMean(samples) {
+  const sorted = [...samples].sort((a, b) => a - b).slice(1, -1);
+  return sorted.reduce((acc, x) => acc + x, 0) / sorted.length;
+}
+
+function shuffle(xs) {
+  for (let i = xs.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [xs[i], xs[j]] = [xs[j], xs[i]];
+  }
+  return xs;
+}
+
 const failures = verifySemantics();
 if (failures.length) {
   console.error('\nAdapters disagree on behaviour, so the timings would be meaningless:\n');
@@ -75,47 +96,55 @@ if (failures.length) {
 }
 
 const names = adapters.map((a) => a.name);
+// samples[scenarioIndex][libName] = number[]; checksums / errors keyed the same way.
+const samples = scenarios.map(() => ({}));
+const checksums = scenarios.map(() => ({}));
+const errors = scenarios.map(() => ({}));
+
+for (let round = 1; round <= ROUNDS; round++) {
+  const jobs = [];
+  scenarios.forEach((_, i) => names.forEach((name) => jobs.push([i, name])));
+
+  // A fresh order every round, so no library always runs right after a particular other one.
+  for (const [i, name] of shuffle(jobs)) {
+    const output = execFileSync(process.execPath, ['--expose-gc', MEASURE, name, String(i)]);
+    const result = JSON.parse(output.toString());
+    if (result.skip) continue;
+    if (result.error) {
+      errors[i][name] = result.error;
+      continue;
+    }
+    (samples[i][name] ??= []).push(result.ms);
+    (checksums[i][name] ??= new Set()).add(result.checksum);
+  }
+
+  process.stderr.write(`\r  round ${round}/${ROUNDS}`);
+}
+process.stderr.write('\n');
+
 const width = Math.max(...names.map((n) => n.length)) + 4;
 
-console.log(`\nnode ${process.version}   ${SAMPLES} samples per cell, median reported\n`);
+console.log(
+  `\nnode ${process.version}   cold start, ${ROUNDS} rounds per cell, ` +
+    `fastest and slowest dropped, mean of the remaining ${ROUNDS - 2}\n`,
+);
 console.log(pad('scenario', 42) + names.map((n) => padStart(n, width)).join(''));
 console.log('-'.repeat(42 + names.length * width));
 
-for (const scenario of scenarios) {
-  const times = {};
-  const checksums = {};
-
-  for (const fw of adapters) {
-    if (scenario.needsBatch && !fw.batch) continue;
-
-    try {
-      // Warm up first, so the timed samples measure steady state rather than the first JIT tier.
-      scenario.run(fw);
-      scenario.run(fw);
-
-      const samples = [];
-      for (let i = 0; i < SAMPLES; i++) {
-        globalThis.gc?.();
-        const start = now();
-        checksums[fw.name] = scenario.run(fw);
-        samples.push(now() - start);
-      }
-      times[fw.name] = median(samples);
-    } catch (e) {
-      checksums[fw.name] = 'threw: ' + e.message;
-    }
-  }
-
-  const cells = names.map((n) => padStart(n in times ? times[n].toFixed(1) + ' ms' : 'n/a', width));
+scenarios.forEach((scenario, i) => {
+  const cells = names.map((name) => {
+    const xs = samples[i][name];
+    return padStart(xs?.length === ROUNDS ? trimmedMean(xs).toFixed(2) + ' ms' : 'n/a', width);
+  });
   console.log(pad(scenario.name, 42) + cells.join(''));
 
-  const numeric = Object.entries(checksums).filter(([, v]) => typeof v === 'number');
-  if (new Set(numeric.map(([, v]) => v)).size > 1) {
-    console.log('   !! checksums disagree: ' + numeric.map(([k, v]) => `${k}=${v}`).join('  '));
+  const values = Object.entries(checksums[i]).flatMap(([name, set]) => [...set].map((v) => [name, v]));
+  if (new Set(values.map(([, v]) => v)).size > 1) {
+    console.log('   !! checksums disagree: ' + values.map(([k, v]) => `${k}=${v}`).join('  '));
   }
-  for (const [k, v] of Object.entries(checksums).filter(([, v]) => typeof v === 'string')) {
-    console.log(`   !! ${k} ${v}`);
+  for (const [name, message] of Object.entries(errors[i])) {
+    console.log(`   !! ${name} threw: ${message}`);
   }
-}
+});
 
 console.log('\nLower is better. "n/a" means the library exposes no primitive for that scenario.\n');
