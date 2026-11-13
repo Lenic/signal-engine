@@ -3,7 +3,6 @@ import type { IValueOptions, IAction, INamedObject } from './base';
 import { SignalValue, MemoValue, EffectAction, globalContext, BatchScope } from './base';
 
 export * from './base';
-export * from './utils';
 
 export interface ISignalSource<T> {
   (): T;
