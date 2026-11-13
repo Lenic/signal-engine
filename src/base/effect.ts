@@ -1,4 +1,4 @@
-import type { IAction, IDisposable, IEffectAction, ILinked, INamedObject } from './types';
+import type { IAction, IConnector, IDisposable, IEffectAction, ILinked, INamedObject } from './types';
 
 import { BatchScope } from './batch';
 import { childrenMethods } from './constants';
@@ -37,8 +37,8 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
     return node;
   }
 
-  markDirty(): void {
-    if (this.isEnqueued) return;
+  markDirty(): IConnector | undefined {
+    if (this.isEnqueued || this.isDisposed) return;
 
     this.isEnqueued = true;
     globalContext.effectList.push(this);

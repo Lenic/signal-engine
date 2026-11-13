@@ -4,19 +4,15 @@ import { BatchScope } from './batch';
 import { ErrorScope } from './error';
 
 export class Disposable implements IDisposable {
-  private _isDisposed: boolean;
+  isDisposed: boolean;
 
   protected constructor() {
-    this._isDisposed = false;
-  }
-
-  get isDisposed() {
-    return this._isDisposed;
+    this.isDisposed = false;
   }
 
   dispose(): void {
-    if (this._isDisposed) return;
-    this._isDisposed = true;
+    if (this.isDisposed) return;
+    this.isDisposed = true;
 
     const batchLevel = BatchScope.isBatching ? undefined : BatchScope.begin();
     const errorLevel = ErrorScope.isActive ? undefined : ErrorScope.begin();

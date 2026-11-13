@@ -52,13 +52,11 @@ export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T
     return this._version;
   }
 
-  markDirty(): void {
-    this.assertNotDisposed();
-
-    if (!this._hasBeenRead) return;
+  markDirty(): IConnector | undefined {
+    if (!this._hasBeenRead || this.isDisposed) return;
     this._hasBeenRead = false;
 
-    notifyDirty(this.runnableHead);
+    return this.runnableHead;
   }
 
   disposeWithErrorContext(): void {

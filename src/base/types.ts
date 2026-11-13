@@ -34,7 +34,7 @@ export interface IRunnable extends IDisposable, INamedObject {
 
   connectibleCurrent?: IConnector;
 
-  markDirty(): void;
+  markDirty(): IConnector | undefined;
 }
 
 export interface IConnector extends IDisposable {

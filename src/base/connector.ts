@@ -3,7 +3,7 @@ import type { IConnectible, IConnector, IDisposable, IRunnable } from './types';
 import { connectibleMethods, runnableMethods } from './constants';
 
 export class Connector implements IConnector, IDisposable {
-  private _isDisposed: boolean;
+  isDisposed: boolean;
 
   runnable: IRunnable;
   connectible: IConnectible;
@@ -16,7 +16,7 @@ export class Connector implements IConnector, IDisposable {
   nextRunnable?: IConnector;
 
   constructor(connectible: IConnectible, runnable: IRunnable, connectibleVersion: number) {
-    this._isDisposed = false;
+    this.isDisposed = false;
 
     this.runnable = runnable;
     this.connectible = connectible;
@@ -27,9 +27,6 @@ export class Connector implements IConnector, IDisposable {
 
     this.prevRunnable = undefined;
     this.nextRunnable = undefined;
-  }
-  get isDisposed(): boolean {
-    return this._isDisposed;
   }
 
   appendToAll() {
@@ -51,8 +48,8 @@ export class Connector implements IConnector, IDisposable {
   }
 
   dispose() {
-    if (this._isDisposed) return;
-    this._isDisposed = true;
+    if (this.isDisposed) return;
+    this.isDisposed = true;
 
     if (this.runnable.connectibleCurrent === this) {
       this.runnable.connectibleCurrent = this.nextConnectible;
@@ -67,7 +64,7 @@ export class Connector implements IConnector, IDisposable {
   }
 
   private assertNotDisposed() {
-    if (this._isDisposed) {
+    if (this.isDisposed) {
       throw new Error('[Connector]: Object is disposed.');
     }
   }

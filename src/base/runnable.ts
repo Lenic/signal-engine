@@ -35,7 +35,7 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
     this._ownNode = globalContext.activeOwner?.adopt(this);
   }
 
-  abstract markDirty(): void;
+  abstract markDirty(): IConnector | undefined;
 
   get name(): string | undefined {
     return this._name;

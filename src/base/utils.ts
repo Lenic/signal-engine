@@ -1,7 +1,6 @@
 import type { IConnector } from './types';
 
 import { BatchScope } from './batch';
-import { ErrorScope } from './error';
 
 let clock = 0;
 export function getClock() {
@@ -9,23 +8,29 @@ export function getClock() {
   return clock;
 }
 
+const stack: IConnector[] = [];
+
 function notifyDirtyWalk(head?: IConnector): void {
   let node = head;
+  if (!node) return;
 
-  const level = ErrorScope.isActive ? null : ErrorScope.begin();
-  try {
+  const baseLength = stack.length;
+  while (true) {
     while (node) {
-      try {
-        node.runnable.markDirty();
-      } catch (e) {
-        ErrorScope.record(e);
+      const next = node.nextRunnable;
+      const child = node.runnable.markDirty();
+      if (child) {
+        if (next) {
+          stack.push(next);
+        }
+        node = child;
+      } else {
+        node = next;
       }
-      node = node.nextRunnable;
     }
-  } finally {
-    if (level !== null) {
-      ErrorScope.end(level);
-    }
+
+    if (stack.length === baseLength) break;
+    node = stack.pop();
   }
 }
 
