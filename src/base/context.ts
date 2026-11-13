@@ -17,7 +17,7 @@ export const globalContext = {
   activeEffect: undefined as IRunnable | undefined,
   track(source: IConnectible, sourceVersion: number): void {
     const effect = this.activeEffect;
-    if (effect === undefined || effect.isDisposed || source.isDisposed) return;
+    if (effect === undefined || effect.isDisposed) return;
 
     const runId = effect.runId;
     const current = effect.connectibleCurrent;
