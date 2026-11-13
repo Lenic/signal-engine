@@ -16,7 +16,7 @@ export interface IValueOptions<T> extends INamedObject {
   comparer?: IAction<[T, T], boolean>;
 }
 
-export interface IConnectible extends INamedObject {
+export interface IConnectible extends IDisposable, INamedObject {
   readonly version: number;
 
   lastRunId?: number;

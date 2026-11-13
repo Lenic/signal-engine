@@ -34,6 +34,18 @@ export class SignalValue<T> implements ISignalValue<T> {
     this._comparer = options?.comparer;
   }
 
+  get isDisposed(): boolean {
+    return false;
+  }
+
+  dispose(): void {
+    let node = this.runnableHead;
+    while (node) {
+      node.dispose();
+      node = this.runnableHead;
+    }
+  }
+
   get name(): string | undefined {
     return this._name;
   }
