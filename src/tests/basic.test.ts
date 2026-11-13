@@ -682,6 +682,51 @@ describe('6. Dispose: stop reacting and release dependencies', () => {
       expect(seen).toEqual([10, 10, 20]);
     });
   });
+
+  describe('6.5 a disposed effect is detached from the sources it read', () => {
+    test('6.5.1 every source drops the effect and the effect drops every source', () => {
+      debugger;
+      const s = new SignalValue(1);
+      const other = new SignalValue(10);
+      const m = new MemoValue(() => s.value * 2);
+
+      const e = new EffectAction(() => {
+        void s.value;
+        void other.value;
+        void m.value;
+      });
+
+      expect(sourcesOf(e)).toEqual([s, other, m]);
+      expect(readerCountOf(s)).toBe(2); // the effect and the memo
+      expect(readerCountOf(other)).toBe(1);
+      expect(readerCountOf(m)).toBe(1);
+
+      e.dispose();
+
+      expect(sourcesOf(e)).toEqual([]);
+      expect(readerCountOf(s)).toBe(1); // only the memo is left
+      expect(readerCountOf(other)).toBe(0);
+      expect(readerCountOf(m)).toBe(0);
+    });
+
+    test('6.5.2 repeated create and dispose does not pile up readers on the signal', () => {
+      const s = new SignalValue(1);
+      let runCount = 0;
+
+      for (let i = 0; i < 100; i++) {
+        new EffectAction(() => {
+          runCount++;
+          void s.value;
+        }).dispose();
+      }
+
+      expect(runCount).toBe(100);
+      expect(readerCountOf(s)).toBe(0);
+
+      s.setValue(2);
+      expect(runCount).toBe(100);
+    });
+  });
 });
 
 describe('7. Batch: grouped writes', () => {

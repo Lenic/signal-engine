@@ -80,6 +80,8 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
   }
 
   disposeWithErrorContext(): void {
+    super.disposeWithErrorContext();
+
     this.isEnqueued = false;
     this._action = undefined as unknown as IAction;
 
