@@ -159,6 +159,46 @@ describe('2. Effect: re-runs when what it read changes', () => {
     expect(runCount).toBe(4);
     expect(list).toEqual([1, 2, 20, 30]);
   });
+
+  test('2.3 an effect found up to date still reacts to the next real change', () => {
+    // s → parity → effect. Odd → odd keeps the parity: the effect is checked and skipped, and that
+    // skipped check must not leave it in a state that swallows the following notifications.
+    const s = new SignalValue(1);
+    const parity = new MemoValue(() => s.value % 2);
+    const seen: number[] = [];
+
+    new EffectAction(() => {
+      seen.push(parity.value);
+    });
+
+    s.setValue(3);
+    expect(seen).toEqual([1]);
+
+    s.setValue(4);
+    s.setValue(6);
+    s.setValue(7);
+    expect(seen).toEqual([1, 0, 1]);
+  });
+
+  test('2.4 a dependency written while the effect is checking its sources is not lost', () => {
+    // Same shape as 4.4, with an effect as the reader: it reads x first, then n. Checking n
+    // recomputes it, and n's getter writes x - a source the effect has already compared.
+    const s = new SignalValue(0);
+    const x = new SignalValue(0);
+    const n = new MemoValue(() => {
+      x.setValue(s.value);
+      return 0;
+    });
+    const seen: number[] = [];
+
+    new EffectAction(() => {
+      seen.push(x.value + n.value);
+    });
+    expect(seen).toEqual([0]);
+
+    s.setValue(5);
+    expect(seen[seen.length - 1]).toBe(5);
+  });
 });
 
 describe('3. Memo: computed lazily and cached', () => {
@@ -298,6 +338,65 @@ describe('4. Propagation: memo chains and diamonds', () => {
     expect(cCount).toBe(2);
     expect(dCount).toBe(2);
     expect(dList).toEqual([111, 212]);
+  });
+
+  test('4.3 only the direct subscribers of the written signal are known to be stale', () => {
+    // s → parity ─┬→ m2 → effA
+    //             └→ effB
+    // Writing 1 → 3 keeps the parity, so nothing below `parity` may re-run. `effB` is a sibling
+    // reached after descending into `m2`; it must still be checked, not treated as changed.
+    const s = new SignalValue(1);
+    const parity = new MemoValue(() => s.value % 2);
+
+    let m2Runs = 0;
+    let effARuns = 0;
+    let effBRuns = 0;
+
+    const m2 = new MemoValue(() => {
+      m2Runs++;
+      return parity.value * 10;
+    });
+    new EffectAction(() => {
+      effARuns++;
+      void m2.value;
+    });
+    new EffectAction(() => {
+      effBRuns++;
+      void parity.value;
+    });
+
+    s.setValue(3);
+    expect(m2Runs).toBe(1);
+    expect(effARuns).toBe(1);
+    expect(effBRuns).toBe(1);
+
+    // A real change still reaches every branch.
+    s.setValue(4);
+    expect(m2Runs).toBe(2);
+    expect(effARuns).toBe(2);
+    expect(effBRuns).toBe(2);
+  });
+
+  test('4.4 a dependency written while the memo is checking its sources is not lost', () => {
+    // M reads x first, then n. Checking n recomputes it, and n's getter writes x - a source M has
+    // already compared. That write marks M stale again and must survive the end of the check.
+    const s = new SignalValue(0, { name: 's' });
+    const x = new SignalValue(0, { name: 'x' });
+    const n = new MemoValue(
+      () => {
+        x.setValue(s.value);
+        return 0;
+      },
+      { name: 'n' },
+    );
+    const m = new MemoValue(() => x.value + n.value, { name: 'm' });
+
+    expect(m.value).toBe(0);
+
+    s.setValue(5);
+    void m.value; // may still be stale: x changed in the middle of this check
+    expect(x.value).toBe(5);
+    expect(m.value).toBe(5);
   });
 });
 
@@ -920,12 +1019,12 @@ describe('8. Depth: long dependency chains', () => {
 
     expect(() => s.setValue(1)).toThrow('head failed');
 
+    s.setValue(2);
     // the graph is still usable afterwards
     const seen: number[] = [];
     new EffectAction(() => {
       seen.push(tail.value);
     });
-    s.setValue(2);
     expect(seen.at(-1)).toBe(DEPTH + 2);
   });
 });

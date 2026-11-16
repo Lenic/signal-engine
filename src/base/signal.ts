@@ -2,6 +2,7 @@ import type { IAction, IBatchSnapshot, IConnector, IRunnable, ISignalValue, IVal
 
 import { BatchScope } from './batch';
 import { globalContext } from './context';
+import { DIRTY_TYPE_DIRTY, DIRTY_TYPE_UNCHECKED } from './types';
 import { getClock, notifyDirty } from './utils';
 
 export class SignalValue<T> implements ISignalValue<T> {
@@ -77,7 +78,7 @@ export class SignalValue<T> implements ISignalValue<T> {
        */
       if (this._hasBeenRead) {
         this._hasBeenRead = false;
-        notifyDirty(this.runnableHead);
+        notifyDirty(this.runnableHead, DIRTY_TYPE_DIRTY);
       }
     }
   }
@@ -109,6 +110,8 @@ export class SignalValue<T> implements ISignalValue<T> {
       target._value = value;
       target._version = version;
       target._hasBeenRead = hasBeenRead;
+
+      notifyDirty(target.runnableHead, DIRTY_TYPE_UNCHECKED);
     }
   }
 }

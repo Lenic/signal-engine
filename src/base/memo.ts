@@ -1,13 +1,22 @@
-import type { IAction, IConnector, IMemoValue, IRunnable, IValueOptions } from './types';
+import type {
+  IAction,
+  IConnector,
+  IMemoValue,
+  IRunnable,
+  IValueOptions,
+  TDirtyType,
+  TMarkableDirtyType,
+} from './types';
 
 import { globalContext } from './context';
 import { Runnable } from './runnable';
+import { DIRTY_TYPE_CLEAN, DIRTY_TYPE_DIRTY, DIRTY_TYPE_UNCHECKED } from './types';
 
 const defaultValue = Symbol('default_memo_value');
 
 export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T> {
   private _version: number;
-  private _hasBeenRead: boolean;
+  private _dirtyType: TDirtyType;
   private _getter: IAction<[], T>;
   private _value: T | typeof defaultValue;
   private _comparer?: IAction<[T, T], boolean>;
@@ -27,8 +36,8 @@ export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T
     this.runnableTail = undefined;
 
     this._version = 0;
-    this._hasBeenRead = false;
     this._value = defaultValue;
+    this._dirtyType = DIRTY_TYPE_DIRTY;
 
     this._getter = getter;
     this._comparer = options?.comparer;
@@ -47,20 +56,23 @@ export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T
   }
 
   get version(): number {
-    if (this._hasBeenRead) return this._version;
+    if (this._dirtyType === DIRTY_TYPE_CLEAN) return this._version;
 
     this.refreshValue();
     return this._version;
   }
 
-  markDirty(): IConnector | undefined {
-    if (!this._hasBeenRead || this.isDisposed) return;
-    this._hasBeenRead = false;
+  markDirty(dirtyType: TMarkableDirtyType): IConnector | undefined {
+    if (this._dirtyType === dirtyType || this.isDisposed) return;
 
-    return this.runnableHead;
+    const originalDirtyType = this._dirtyType;
+    this._dirtyType = dirtyType;
+
+    return originalDirtyType === DIRTY_TYPE_CLEAN ? this.runnableHead : undefined;
   }
 
   disposeWithErrorContext(): void {
+    this._dirtyType = DIRTY_TYPE_CLEAN;
     this._getter = undefined as unknown as IAction<[], T>;
 
     let node1 = this.connectibleHead;
@@ -77,11 +89,13 @@ export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T
   }
 
   private refreshValue() {
-    if (this._hasBeenRead || this.isDisposed) return;
-    this._hasBeenRead = true;
+    if (this._dirtyType === DIRTY_TYPE_CLEAN || this.isDisposed) return;
 
-    if (this.isUpToDate() || this.isDisposed) return;
+    const originalDirtyType = this._dirtyType;
+    this._dirtyType = DIRTY_TYPE_CLEAN;
+    if (originalDirtyType === DIRTY_TYPE_UNCHECKED && (this.isUpToDate() || this.isDisposed)) return;
 
+    this._dirtyType = DIRTY_TYPE_CLEAN;
     const newValue = this.execute(this._getter);
     if (!this.equal(newValue)) {
       this._value = newValue;

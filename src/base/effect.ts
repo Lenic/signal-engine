@@ -1,14 +1,25 @@
-import type { IAction, IConnector, IDisposable, IEffectAction, ILinked, INamedObject } from './types';
+import type {
+  IAction,
+  IConnector,
+  IDisposable,
+  IEffectAction,
+  ILinked,
+  INamedObject,
+  TDirtyType,
+  TMarkableDirtyType,
+} from './types';
 
 import { BatchScope } from './batch';
 import { childrenMethods } from './constants';
 import { globalContext } from './context';
 import { ErrorScope } from './error';
 import { Runnable } from './runnable';
+import { DIRTY_TYPE_CLEAN, DIRTY_TYPE_DIRTY, DIRTY_TYPE_UNCHECKED } from './types';
 
 export class EffectAction extends Runnable<EffectAction> implements IEffectAction {
+  private _dirtyType: TDirtyType;
   private _customCleanup?: IAction;
-  private _needsToPushToQueue: boolean;
+  private _needsToPushToQueue: TDirtyType;
   private _action: IAction<[], void | IAction>;
 
   isEnqueued: boolean;
@@ -24,7 +35,8 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
     this._customCleanup = undefined;
 
     this._action = action;
-    this._needsToPushToQueue = false;
+    this._dirtyType = DIRTY_TYPE_DIRTY;
+    this._needsToPushToQueue = DIRTY_TYPE_CLEAN;
 
     this.isEnqueued = false;
 
@@ -37,22 +49,29 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
     return node;
   }
 
-  markDirty(): IConnector | undefined {
-    if (this.isEnqueued || this.isDisposed) return;
+  markDirty(dirtyType: TMarkableDirtyType): IConnector | undefined {
+    if (this.isDisposed) return;
 
-    this.isEnqueued = true;
-    globalContext.effectList.push(this);
+    this._dirtyType = dirtyType;
+
+    if (!this.isEnqueued) {
+      this.isEnqueued = true;
+      globalContext.effectList.push(this);
+    }
   }
 
   run() {
     this.assertNotDisposed();
 
     if (this.isSelfRunning) {
-      this._needsToPushToQueue = true;
+      this._needsToPushToQueue = this._dirtyType;
       return;
     }
 
-    if (this.isUpToDate() || this.isDisposed) return;
+    if (this._dirtyType === DIRTY_TYPE_CLEAN) return;
+    if (this._dirtyType === DIRTY_TYPE_UNCHECKED && (this.isUpToDate() || this.isDisposed)) return;
+    this._dirtyType = DIRTY_TYPE_CLEAN;
+    this._needsToPushToQueue = DIRTY_TYPE_CLEAN;
 
     this.releaseChildren();
 
@@ -63,15 +82,16 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
     } finally {
       globalContext.activeOwner = previousActiveOwner;
 
-      if (this._needsToPushToQueue) {
-        this._needsToPushToQueue = false;
+      if (this._needsToPushToQueue !== DIRTY_TYPE_CLEAN) {
+        const arg = this._needsToPushToQueue;
+        this._needsToPushToQueue = DIRTY_TYPE_CLEAN;
 
         if (BatchScope.isBatching) {
-          this.markDirty();
+          this.markDirty(arg);
         } else {
           const level = BatchScope.begin();
           try {
-            this.markDirty();
+            this.markDirty(arg);
           } finally {
             BatchScope.end(level);
           }
@@ -84,6 +104,7 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
     super.disposeWithErrorContext();
 
     this.isEnqueued = false;
+    this._dirtyType = DIRTY_TYPE_CLEAN;
     this._action = undefined as unknown as IAction;
 
     try {

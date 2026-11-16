@@ -16,6 +16,13 @@ export interface IValueOptions<T> extends INamedObject {
   comparer?: IAction<[T, T], boolean>;
 }
 
+export const DIRTY_TYPE_CLEAN = 0;
+export const DIRTY_TYPE_UNCHECKED = 1;
+export const DIRTY_TYPE_DIRTY = 2;
+
+export type TDirtyType = typeof DIRTY_TYPE_CLEAN | typeof DIRTY_TYPE_UNCHECKED | typeof DIRTY_TYPE_DIRTY;
+export type TMarkableDirtyType = Exclude<TDirtyType, typeof DIRTY_TYPE_CLEAN>;
+
 export interface IConnectible extends IDisposable, INamedObject {
   readonly version: number;
 
@@ -34,7 +41,7 @@ export interface IRunnable extends IDisposable, INamedObject {
 
   connectibleCurrent?: IConnector;
 
-  markDirty(): IConnector | undefined;
+  markDirty(dirtyType: TMarkableDirtyType): IConnector | undefined;
 }
 
 export interface IConnector extends IDisposable {

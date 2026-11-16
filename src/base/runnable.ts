@@ -1,12 +1,10 @@
-import type { IAction, IConnector, IDisposable, IEffectOwner, ILinked, IRunnable } from './types';
+import type { IAction, IConnector, IDisposable, IEffectOwner, ILinked, IRunnable, TMarkableDirtyType } from './types';
 
 import { childrenMethods } from './constants';
 import { globalContext } from './context';
 import { Disposable } from './disposable';
 
 export abstract class Runnable<T extends Runnable<T>> extends Disposable implements IRunnable {
-  private _isInitialized: boolean;
-
   private _owner?: IEffectOwner;
   private _ownNode?: ILinked<IDisposable>;
 
@@ -30,17 +28,15 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
     this.runId = 0;
     this.name = name;
 
-    this._isInitialized = false;
     this.isSelfRunning = false;
 
     this._owner = globalContext.activeOwner;
     this._ownNode = globalContext.activeOwner?.adopt(this);
   }
 
-  abstract markDirty(): IConnector | undefined;
+  abstract markDirty(dirtyType: TMarkableDirtyType): IConnector | undefined;
 
   disposeWithErrorContext(): void {
-    this._isInitialized = false;
     this.isSelfRunning = false;
 
     if (this._ownNode && this._owner) {
@@ -58,8 +54,6 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
   }
 
   protected isUpToDate(): boolean {
-    if (!this._isInitialized) return false;
-
     let node = this.connectibleHead;
     while (node) {
       if (node.connectibleVersion !== node.connectible.version) return false;
@@ -77,7 +71,6 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
     }
 
     this.isSelfRunning = true;
-    this._isInitialized = true;
 
     const previousActiveEffect = globalContext.activeEffect;
     const previousIsEffectRunning = globalContext.isEffectRunning;
