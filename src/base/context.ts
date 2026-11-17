@@ -10,7 +10,6 @@ const MAX_ITERATION_DEPTH = 100;
 let inactiveEffectList: IEffectAction[] = [];
 
 export const globalContext = {
-  isEffectRunning: false,
   activeOwner: undefined as IEffectOwner | undefined,
   effectList: [] as IEffectAction[],
   batchSnapshots: [] as IBatchSnapshot[],
@@ -41,16 +40,13 @@ export const globalContext = {
   },
   untracked<T>(fn: () => T) {
     const previousActiveEffect = this.activeEffect;
-    const previousEffectRunning = this.isEffectRunning;
     const previousActiveOwner = this.activeOwner;
     this.activeEffect = undefined;
-    this.isEffectRunning = false;
     this.activeOwner = undefined;
     try {
       return fn();
     } finally {
       this.activeEffect = previousActiveEffect;
-      this.isEffectRunning = previousEffectRunning;
       this.activeOwner = previousActiveOwner;
     }
   },

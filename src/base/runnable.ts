@@ -87,9 +87,7 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
     this.isSelfRunning = true;
 
     const previousActiveEffect = globalContext.activeEffect;
-    const previousIsEffectRunning = globalContext.isEffectRunning;
     globalContext.activeEffect = this;
-    globalContext.isEffectRunning = true;
 
     try {
       return this.runAction(action);
@@ -97,7 +95,6 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
       this.isSelfRunning = false;
 
       globalContext.activeEffect = previousActiveEffect;
-      globalContext.isEffectRunning = previousIsEffectRunning;
     }
   }
 
