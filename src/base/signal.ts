@@ -1,8 +1,8 @@
-import type { IAction, IBatchSnapshot, IConnector, IRunnable, ISignalValue, IValueOptions } from './types';
+import type { IAction, IBatchSnapshot, IConnector, IRunnable, ISignalValue, IValueOptions, TDirtyType } from './types';
 
 import { BatchScope } from './batch';
 import { globalContext } from './context';
-import { DIRTY_TYPE_DIRTY, DIRTY_TYPE_UNCHECKED } from './types';
+import { DIRTY_TYPE_CLEAN, DIRTY_TYPE_DIRTY, DIRTY_TYPE_UNCHECKED } from './types';
 import { getClock, notifyDirty } from './utils';
 
 export class SignalValue<T> implements ISignalValue<T> {
@@ -12,6 +12,8 @@ export class SignalValue<T> implements ISignalValue<T> {
   private _hasBeenRead: boolean;
   private _isQueuedForBatchResume: boolean;
   private _comparer?: IAction<[T, T], boolean>;
+
+  dirtyType: TDirtyType;
 
   lastRunId?: number;
   lastRunnable?: IRunnable;
@@ -30,10 +32,13 @@ export class SignalValue<T> implements ISignalValue<T> {
     this._version = 0;
     this._value = value;
     this._hasBeenRead = false;
+    this.dirtyType = DIRTY_TYPE_CLEAN;
 
     this._name = options?.name;
     this._comparer = options?.comparer;
   }
+
+  refresh(): void {}
 
   get isDisposed(): boolean {
     return false;

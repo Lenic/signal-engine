@@ -14,10 +14,9 @@ import { childrenMethods } from './constants';
 import { globalContext } from './context';
 import { ErrorScope } from './error';
 import { Runnable } from './runnable';
-import { DIRTY_TYPE_CLEAN, DIRTY_TYPE_DIRTY, DIRTY_TYPE_UNCHECKED } from './types';
+import { DIRTY_TYPE_CLEAN } from './types';
 
 export class EffectAction extends Runnable<EffectAction> implements IEffectAction {
-  private _dirtyType: TDirtyType;
   private _customCleanup?: IAction;
   private _needsToPushToQueue: TDirtyType;
   private _action: IAction<[], void | IAction>;
@@ -35,7 +34,6 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
     this._customCleanup = undefined;
 
     this._action = action;
-    this._dirtyType = DIRTY_TYPE_DIRTY;
     this._needsToPushToQueue = DIRTY_TYPE_CLEAN;
 
     this.isEnqueued = false;
@@ -52,7 +50,7 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
   markDirty(dirtyType: TMarkableDirtyType): IConnector | undefined {
     if (this.isDisposed) return;
 
-    this._dirtyType = dirtyType;
+    this.dirtyType = dirtyType;
 
     if (!this.isEnqueued) {
       this.isEnqueued = true;
@@ -61,16 +59,12 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
   }
 
   run() {
-    this.assertNotDisposed();
+    if (!this.shoudRun()) return;
 
     if (this.isSelfRunning) {
-      this._needsToPushToQueue = this._dirtyType;
+      this._needsToPushToQueue = this.dirtyType;
       return;
     }
-
-    if (this._dirtyType === DIRTY_TYPE_CLEAN) return;
-    if (this._dirtyType === DIRTY_TYPE_UNCHECKED && (this.isUpToDate() || this.isDisposed)) return;
-    this._dirtyType = DIRTY_TYPE_CLEAN;
     this._needsToPushToQueue = DIRTY_TYPE_CLEAN;
 
     this.releaseChildren();
@@ -104,7 +98,6 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
     super.disposeWithErrorContext();
 
     this.isEnqueued = false;
-    this._dirtyType = DIRTY_TYPE_CLEAN;
     this._action = undefined as unknown as IAction;
 
     try {

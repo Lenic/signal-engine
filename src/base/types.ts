@@ -23,7 +23,11 @@ export const DIRTY_TYPE_DIRTY = 2;
 export type TDirtyType = typeof DIRTY_TYPE_CLEAN | typeof DIRTY_TYPE_UNCHECKED | typeof DIRTY_TYPE_DIRTY;
 export type TMarkableDirtyType = Exclude<TDirtyType, typeof DIRTY_TYPE_CLEAN>;
 
-export interface IConnectible extends IDisposable, INamedObject {
+export interface IDirtyable {
+  readonly dirtyType: TDirtyType;
+}
+
+export interface IConnectible extends IDirtyable, IDisposable, INamedObject {
   readonly version: number;
 
   lastRunId?: number;
@@ -31,9 +35,11 @@ export interface IConnectible extends IDisposable, INamedObject {
 
   runnableHead?: IConnector;
   runnableTail?: IConnector;
+
+  refresh(): void;
 }
 
-export interface IRunnable extends IDisposable, INamedObject {
+export interface IRunnable extends IDirtyable, IDisposable, INamedObject {
   readonly runId: number;
 
   connectibleHead?: IConnector;
