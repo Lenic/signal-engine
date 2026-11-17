@@ -59,10 +59,12 @@ function clearEffectList() {
 
 let isConsuming = false;
 function consumeTail() {
-  if (!(globalContext.batchSnapshots.length || globalContext.effectList.length)) return;
+  if (globalContext.batchSnapshots.length) {
+    globalContext.batchSnapshots.forEach(SignalValue.restoreFromBatch);
+    globalContext.batchSnapshots.length = 0;
+  }
 
-  globalContext.batchSnapshots.forEach(SignalValue.restoreFromBatch);
-  globalContext.batchSnapshots.length = 0;
+  if (!globalContext.effectList.length) return;
 
   if (isConsuming) return;
   isConsuming = true;
@@ -83,7 +85,8 @@ function consumeTail() {
 
       const errorLevel = ErrorScope.begin();
       try {
-        for (const item of list) {
+        for (let i = 0; i < list.length; i++) {
+          const item = list[i];
           item.isEnqueued = false;
           if (item.isDisposed) continue;
 

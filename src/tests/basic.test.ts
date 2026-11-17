@@ -1,4 +1,4 @@
-import type { IConnectible, IRunnable } from '../base/types';
+import type { IConnectible, IConnector, IRunnable } from '../base/types';
 
 import { describe, expect, test } from 'vitest';
 
@@ -581,6 +581,58 @@ describe('5. Dependency tracking: the same source read more than once', () => {
     s.setValue(3);
     expect(seen).toEqual([12, 24, 36]);
     expect(sourcesOf(inner)).toEqual([s]);
+  });
+
+  test('5.9 a connector moved to another source leaves both reader lists intact', () => {
+    /** Walks the reader list both ways and checks that every node really belongs to `source`. */
+    function readerListOf(source: IConnectible): IRunnable[] {
+      const forward: IConnector[] = [];
+      for (let node = source.runnableHead; node; node = node.nextRunnable) {
+        expect(node.connectible).toBe(source);
+        forward.push(node);
+      }
+
+      const backward: IConnector[] = [];
+      for (let node = source.runnableTail; node; node = node.prevRunnable) {
+        backward.unshift(node);
+      }
+
+      expect(backward).toEqual(forward);
+      return forward.map((node) => node.runnable);
+    }
+
+    // `a` is read by `c` first and by `e` second, so c's connector is not the tail of a's list.
+    // When `c` switches from `a` to `b`, that connector is relinked in place and must not keep
+    // pointing at `e`'s connector, which still lives in a's list.
+    const flag = new SignalValue(true);
+    const a = new SignalValue(1);
+    const b = new SignalValue(2);
+    const c = new MemoValue(() => (flag.value ? a.value : b.value));
+
+    new EffectAction(() => {
+      void c.value;
+    });
+
+    let eRuns = 0;
+    const e = new EffectAction(() => {
+      eRuns++;
+      void a.value;
+    });
+
+    expect(readerListOf(a)).toEqual([c, e]);
+    expect(readerListOf(b)).toEqual([]);
+
+    flag.setValue(false);
+    expect(sourcesOf(c)).toEqual([flag, b]);
+    expect(readerListOf(a)).toEqual([e]);
+    expect(readerListOf(b)).toEqual([c]);
+
+    // Only `c` (and the effect above it) depend on `b`: writing it must not reach `e`.
+    b.setValue(20);
+    expect(eRuns).toBe(1);
+
+    a.setValue(10);
+    expect(eRuns).toBe(2);
   });
 });
 

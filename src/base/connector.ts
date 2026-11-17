@@ -39,12 +39,33 @@ export class Connector implements IConnector, IDisposable {
   updateConnectible(connectible: IConnectible, connectibleVersion: number) {
     this.assertNotDisposed();
 
-    connectibleMethods.remove(this, this.connectible);
+    // remove
+    const prev = this.prevRunnable;
+    const next = this.nextRunnable;
 
+    if (prev) prev.nextRunnable = next;
+    if (next) next.prevRunnable = prev;
+
+    const previous = this.connectible;
+    if (previous.runnableHead === this) previous.runnableHead = next;
+    if (previous.runnableTail === this) previous.runnableTail = prev;
+
+    // update
     this.connectible = connectible;
     this.connectibleVersion = connectibleVersion;
 
-    connectibleMethods.append(this, this.connectible);
+    // append
+    const tail = connectible.runnableTail;
+    if (tail) {
+      tail.nextRunnable = this;
+    } else {
+      connectible.runnableHead = this;
+    }
+
+    this.prevRunnable = tail;
+    this.nextRunnable = undefined;
+
+    connectible.runnableTail = this;
   }
 
   dispose() {
