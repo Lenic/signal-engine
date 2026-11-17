@@ -12,28 +12,24 @@ export function getClock() {
 const stack: IConnector[] = [];
 
 function notifyDirtyWalk(head: IConnector | undefined, dirtyType: TMarkableDirtyType): void {
-  let node = head;
-  if (!node) return;
-
-  let nextDirtyType = dirtyType;
   const baseLength = stack.length;
-  while (true) {
-    while (node) {
-      const next = node.nextRunnable;
-      const child = node.runnable.markDirty(nextDirtyType);
-      nextDirtyType = DIRTY_TYPE_UNCHECKED;
+  for (let item: IConnector | undefined = head; item; item = item.nextRunnable) {
+    let inner = item.runnable.markDirty(dirtyType);
+
+    while (inner) {
+      const next = inner.nextRunnable;
+      const child = inner.runnable.markDirty(DIRTY_TYPE_UNCHECKED);
       if (child) {
-        if (next) {
-          stack.push(next);
-        }
-        node = child;
+        if (next) stack.push(next);
+        inner = child;
       } else {
-        node = next;
+        inner = next;
+
+        if (!inner && stack.length > baseLength) {
+          inner = stack.pop();
+        }
       }
     }
-
-    if (stack.length === baseLength) break;
-    node = stack.pop();
   }
 }
 
