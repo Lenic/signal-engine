@@ -84,11 +84,8 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
           this.markDirty(arg);
         } else {
           const level = BatchScope.begin();
-          try {
-            this.markDirty(arg);
-          } finally {
-            BatchScope.end(level);
-          }
+          this.markDirty(arg);
+          BatchScope.end(level);
         }
       }
     }
@@ -117,8 +114,8 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
     let node = this.childrenHead;
     if (!node) return;
 
-    const batchLevel = BatchScope.isBatching ? null : BatchScope.begin();
-    const errorLevel = ErrorScope.isActive ? null : ErrorScope.begin();
+    const batchLevel = BatchScope.isBatching ? undefined : BatchScope.begin();
+    const errorLevel = ErrorScope.isActive ? undefined : ErrorScope.begin();
 
     try {
       while (node) {
@@ -132,9 +129,9 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
       }
     } finally {
       try {
-        if (errorLevel !== null) ErrorScope.end(errorLevel);
+        if (errorLevel !== undefined) ErrorScope.end(errorLevel);
       } finally {
-        if (batchLevel !== null) BatchScope.end(batchLevel);
+        if (batchLevel !== undefined) BatchScope.end(batchLevel);
       }
     }
   }

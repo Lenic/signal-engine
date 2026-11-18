@@ -1,6 +1,5 @@
 import type { IDisposable } from './types';
 
-import { BatchScope } from './batch';
 import { ErrorScope } from './error';
 
 export class Disposable implements IDisposable {
@@ -14,19 +13,14 @@ export class Disposable implements IDisposable {
     if (this.isDisposed) return;
     this.isDisposed = true;
 
-    const batchLevel = BatchScope.isBatching ? undefined : BatchScope.begin();
     const errorLevel = ErrorScope.isActive ? undefined : ErrorScope.begin();
 
     try {
       this.disposeWithErrorContext();
     } catch (e) {
       ErrorScope.record(e);
-    }
-
-    try {
-      if (errorLevel !== undefined) ErrorScope.end(errorLevel);
     } finally {
-      if (batchLevel !== undefined) BatchScope.end(batchLevel);
+      if (errorLevel !== undefined) ErrorScope.end(errorLevel);
     }
   }
 

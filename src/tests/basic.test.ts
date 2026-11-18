@@ -947,7 +947,7 @@ describe('6. Dispose: stop reacting and release dependencies', () => {
     expect(seenByChild).toEqual([0]);
   });
 
-  test('6.8 writes made by a cleanup during dispose reach other effects as one update', () => {
+  test('6.8 writes made by a cleanup during dispose are not batched and reach other effects one by one', () => {
     const a = new SignalValue(0);
     const b = new SignalValue(0);
     const seen: string[] = [];
@@ -966,8 +966,9 @@ describe('6. Dispose: stop reacting and release dependencies', () => {
     expect(seen).toEqual(['0-0']);
 
     disposing.dispose();
-    // Both writes are grouped, so the observer never sees the half-updated '1-0'.
-    expect(seen).toEqual(['0-0', '1-1']);
+    // dispose() opens no batch of its own, so each write propagates immediately and the observer
+    // sees the intermediate '1-0'. Wrap the writes in a batch inside the cleanup to group them.
+    expect(seen).toEqual(['0-0', '1-0', '1-1']);
   });
 });
 

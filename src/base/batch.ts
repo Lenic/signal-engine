@@ -12,7 +12,7 @@ export class BatchScope {
   }
 
   static begin(): number {
-    return (depth = depth + 1);
+    return (depth += 1);
   }
 
   static end(level: number): void {

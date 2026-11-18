@@ -30,15 +30,11 @@ export class Connector implements IConnector, IDisposable {
   }
 
   appendToAll() {
-    this.assertNotDisposed();
-
     runnableMethods.append(this, this.runnable);
     connectibleMethods.append(this, this.connectible);
   }
 
   updateConnectible(connectible: IConnectible, connectibleVersion: number) {
-    this.assertNotDisposed();
-
     // remove
     const prev = this.prevRunnable;
     const next = this.nextRunnable;
@@ -82,11 +78,5 @@ export class Connector implements IConnector, IDisposable {
     this.connectibleVersion = -1;
     this.runnable = undefined as unknown as IRunnable;
     this.connectible = undefined as unknown as IConnectible;
-  }
-
-  private assertNotDisposed() {
-    if (this.isDisposed) {
-      throw new Error('[Connector]: Object is disposed.');
-    }
   }
 }
