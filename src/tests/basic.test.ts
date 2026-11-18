@@ -915,6 +915,60 @@ describe('6. Dispose: stop reacting and release dependencies', () => {
     expect(childRuns).toBe(2);
     expect(childCleanups).toBe(1);
   });
+
+  test('6.7 a parent cleanup writing what its child reads does not re-run the child being disposed', () => {
+    const s = new SignalValue(0);
+    const seenByChild: number[] = [];
+    let childCleanups = 0;
+
+    const parent = new EffectAction(() => {
+      new EffectAction(() => {
+        seenByChild.push(s.value);
+        return () => {
+          childCleanups++;
+        };
+      });
+
+      return () => {
+        s.setValue(1);
+      };
+    });
+
+    expect(seenByChild).toEqual([0]);
+
+    parent.dispose();
+    // The child is about to be released together with its parent, so the parent's cleanup
+    // must not wake it up for one more run.
+    expect(seenByChild).toEqual([0]);
+    expect(childCleanups).toBe(1);
+
+    // And it stays released afterwards.
+    s.setValue(2);
+    expect(seenByChild).toEqual([0]);
+  });
+
+  test('6.8 writes made by a cleanup during dispose reach other effects as one update', () => {
+    const a = new SignalValue(0);
+    const b = new SignalValue(0);
+    const seen: string[] = [];
+
+    new EffectAction(() => {
+      seen.push(`${a.value}-${b.value}`);
+    });
+
+    const disposing = new EffectAction(() => {
+      return () => {
+        a.setValue(1);
+        b.setValue(1);
+      };
+    });
+
+    expect(seen).toEqual(['0-0']);
+
+    disposing.dispose();
+    // Both writes are grouped, so the observer never sees the half-updated '1-0'.
+    expect(seen).toEqual(['0-0', '1-1']);
+  });
 });
 
 describe('7. Batch: grouped writes', () => {

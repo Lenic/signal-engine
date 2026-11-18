@@ -101,13 +101,13 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
     this._action = undefined as unknown as IAction;
 
     try {
-      this.runCustomCleanup();
+      this.releaseChildren();
     } catch (e) {
       ErrorScope.record(e);
     }
 
     try {
-      this.releaseChildren();
+      this.runCustomCleanup();
     } catch (e) {
       ErrorScope.record(e);
     }
