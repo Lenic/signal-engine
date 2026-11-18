@@ -24,7 +24,7 @@ export const globalContext = {
     if (source.lastRunnable === effect && source.lastRunId === runId) return;
 
     if (!current) {
-      new Connector(source, effect, sourceVersion).appendToAll();
+      new Connector(source, effect, sourceVersion);
       effect.connectibleCurrent = undefined;
     } else {
       if (source === current.connectible) {

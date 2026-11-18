@@ -42,8 +42,20 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
   }
 
   adopt(disposable: IDisposable): ILinked<IDisposable> {
-    const node: ILinked<IDisposable> = { value: disposable, prev: undefined, next: undefined };
-    childrenMethods.append(node, this);
+    const tail = this.childrenTail;
+    const node: ILinked<IDisposable> = {
+      value: disposable,
+      prev: tail,
+      next: undefined,
+    };
+
+    if (tail) {
+      tail.next = node;
+    } else {
+      this.childrenHead = node;
+    }
+    this.childrenTail = node;
+
     return node;
   }
 
@@ -97,14 +109,12 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
     this.isEnqueued = false;
     this._action = undefined as unknown as IAction;
 
-    try {
-      this.releaseChildren();
-    } catch (e) {
-      ErrorScope.record(e);
-    }
+    this.releaseChildren();
   }
 
   private releaseChildren() {
+    if (!this.childrenHead && !this._customCleanup) return;
+
     const errorLevel = ErrorScope.isActive ? undefined : ErrorScope.begin();
     for (let node = this.childrenHead; node; node = this.childrenHead) {
       try {

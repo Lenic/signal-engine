@@ -61,7 +61,6 @@ export interface IConnector extends IDisposable {
   prevRunnable?: IConnector;
   nextRunnable?: IConnector;
 
-  appendToAll(): void;
   updateConnectible(connectible: IConnectible, connectibleVersion: number): void;
 }
 

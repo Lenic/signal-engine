@@ -1,7 +1,5 @@
 import type { IConnectible, IConnector, IDisposable, IRunnable } from './types';
 
-import { connectibleMethods, runnableMethods } from './constants';
-
 export class Connector implements IConnector, IDisposable {
   isDisposed: boolean;
 
@@ -22,16 +20,27 @@ export class Connector implements IConnector, IDisposable {
     this.connectible = connectible;
     this.connectibleVersion = connectibleVersion;
 
-    this.prevConnectible = undefined;
+    // append to runnable
+    const tailInRunnable = runnable.connectibleTail;
+    if (tailInRunnable) {
+      tailInRunnable.nextConnectible = this;
+    } else {
+      runnable.connectibleHead = this;
+    }
+    this.prevConnectible = tailInRunnable;
+    runnable.connectibleTail = this;
     this.nextConnectible = undefined;
 
-    this.prevRunnable = undefined;
+    // append to connectible
+    const tailInConnectible = connectible.runnableTail;
+    if (tailInConnectible) {
+      tailInConnectible.nextRunnable = this;
+    } else {
+      connectible.runnableHead = this;
+    }
+    this.prevRunnable = tailInConnectible;
+    connectible.runnableTail = this;
     this.nextRunnable = undefined;
-  }
-
-  appendToAll() {
-    runnableMethods.append(this, this.runnable);
-    connectibleMethods.append(this, this.connectible);
   }
 
   updateConnectible(connectible: IConnectible, connectibleVersion: number) {
@@ -72,9 +81,46 @@ export class Connector implements IConnector, IDisposable {
       this.runnable.connectibleCurrent = this.nextConnectible;
     }
 
-    runnableMethods.remove(this, this.runnable);
-    connectibleMethods.remove(this, this.connectible);
+    const { connectible, runnable } = this;
 
+    // detach from runnable
+    const prevC = this.prevConnectible;
+    const nextC = this.nextConnectible;
+
+    if (prevC) {
+      prevC.nextConnectible = nextC;
+    } else {
+      runnable.connectibleHead = nextC;
+    }
+
+    if (nextC) {
+      nextC.prevConnectible = prevC;
+    } else {
+      runnable.connectibleTail = prevC;
+    }
+
+    this.prevConnectible = undefined;
+    this.nextConnectible = undefined;
+
+    // detach from connectible
+    const prevR = this.prevRunnable;
+    const nextR = this.nextRunnable;
+
+    if (prevR) {
+      prevR.nextRunnable = nextR;
+    } else {
+      connectible.runnableHead = nextR;
+    }
+    if (nextR) {
+      nextR.prevRunnable = prevR;
+    } else {
+      connectible.runnableTail = prevR;
+    }
+
+    this.prevRunnable = undefined;
+    this.nextRunnable = undefined;
+
+    // release other properties
     this.connectibleVersion = -1;
     this.runnable = undefined as unknown as IRunnable;
     this.connectible = undefined as unknown as IConnectible;
