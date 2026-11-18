@@ -38,8 +38,6 @@ export class SignalValue<T> implements ISignalValue<T> {
     this._comparer = options?.comparer;
   }
 
-  refresh(): void {}
-
   get isDisposed(): boolean {
     return false;
   }

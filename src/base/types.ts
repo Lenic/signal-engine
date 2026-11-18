@@ -35,8 +35,6 @@ export interface IConnectible extends IDirtyable, IDisposable, INamedObject {
 
   runnableHead?: IConnector;
   runnableTail?: IConnector;
-
-  refresh(): void;
 }
 
 export interface IRunnable extends IDirtyable, IDisposable, INamedObject {

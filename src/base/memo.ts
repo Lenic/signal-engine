@@ -78,7 +78,7 @@ export class MemoValue<T> extends Runnable<MemoValue<T>> implements IMemoValue<T
     }
   }
 
-  refresh(): void {
+  private refresh(): void {
     if (!this.shoudRun()) return;
 
     const newValue = this.execute(this._getter);
