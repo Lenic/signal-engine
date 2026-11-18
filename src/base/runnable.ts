@@ -81,7 +81,6 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
     if (this.isSelfRunning) {
       throw new Error('[Runnable]: Cannot run iteratively.');
     }
-
     this.isSelfRunning = true;
 
     const previousActiveEffect = globalContext.activeEffect;

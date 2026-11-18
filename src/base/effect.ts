@@ -81,6 +81,8 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
 
     this.releaseChildren();
 
+    if (this.isDisposed) return;
+
     const previousActiveOwner = globalContext.activeOwner;
     globalContext.activeOwner = this;
     try {
@@ -138,8 +140,6 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
   }
 
   private static runAction(ctx: EffectAction) {
-    if (ctx.isDisposed) return;
-
     const result = ctx._action();
     if (typeof result === 'function') {
       ctx._customCleanup = result;
