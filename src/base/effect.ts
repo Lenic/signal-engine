@@ -102,53 +102,32 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
     } catch (e) {
       ErrorScope.record(e);
     }
-
-    try {
-      this.runCustomCleanup();
-    } catch (e) {
-      ErrorScope.record(e);
-    }
   }
 
   private releaseChildren() {
-    let node = this.childrenHead;
-    if (!node) return;
-
-    const batchLevel = BatchScope.isBatching ? undefined : BatchScope.begin();
     const errorLevel = ErrorScope.isActive ? undefined : ErrorScope.begin();
-
-    try {
-      while (node) {
-        try {
-          childrenMethods.remove(node, this);
-          node.value.dispose();
-        } catch (e) {
-          ErrorScope.record(e);
-        }
-        node = this.childrenHead;
-      }
-    } finally {
+    for (let node = this.childrenHead; node; node = this.childrenHead) {
       try {
-        if (errorLevel !== undefined) ErrorScope.end(errorLevel);
-      } finally {
-        if (batchLevel !== undefined) BatchScope.end(batchLevel);
+        childrenMethods.remove(node, this);
+        node.value.dispose();
+      } catch (e) {
+        ErrorScope.record(e);
       }
     }
-  }
 
-  private runCustomCleanup() {
-    if (!this._customCleanup) return;
-
-    try {
-      globalContext.untracked(this._customCleanup);
-    } finally {
-      this._customCleanup = undefined;
+    if (this._customCleanup) {
+      try {
+        globalContext.untracked(this._customCleanup);
+      } catch (e) {
+        ErrorScope.record(e);
+      } finally {
+        this._customCleanup = undefined;
+      }
     }
+    if (errorLevel !== undefined) ErrorScope.end(errorLevel);
   }
 
   private static runAction(ctx: EffectAction) {
-    ctx.runCustomCleanup();
-
     if (ctx.isDisposed) return;
 
     const result = ctx._action();

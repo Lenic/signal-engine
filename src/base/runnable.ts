@@ -78,8 +78,6 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
   }
 
   protected execute<TResult = void>(action: IAction<[context: T], TResult>): TResult {
-    this.assertNotDisposed();
-
     if (this.isSelfRunning) {
       throw new Error('[Runnable]: Cannot run iteratively.');
     }

@@ -1,8 +1,6 @@
 import type { IDisposable } from './types';
 
-import { ErrorScope } from './error';
-
-export class Disposable implements IDisposable {
+export abstract class Disposable implements IDisposable {
   isDisposed: boolean;
 
   protected constructor() {
@@ -13,27 +11,8 @@ export class Disposable implements IDisposable {
     if (this.isDisposed) return;
     this.isDisposed = true;
 
-    const errorLevel = ErrorScope.isActive ? undefined : ErrorScope.begin();
-
-    try {
-      this.disposeWithErrorContext();
-    } catch (e) {
-      ErrorScope.record(e);
-    } finally {
-      if (errorLevel !== undefined) ErrorScope.end(errorLevel);
-    }
+    this.disposeWithErrorContext();
   }
 
-  protected assertNotDisposed() {
-    if (this.isDisposed) {
-      throw new Error('[Disposable]: Object is disposed.');
-    }
-  }
-
-  protected disposeWithErrorContext() {}
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function isDisposable(value: any): value is IDisposable {
-  return typeof value?.dispose === 'function' && value.dispose.length === 0;
+  protected abstract disposeWithErrorContext(): void;
 }

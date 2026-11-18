@@ -36,26 +36,26 @@ export class ErrorScope {
   }
 
   static begin(): number {
-    const currentDepth = (depth = depth + 1);
-    startCounts[currentDepth] = errors.length;
+    depth += 1;
+    startCounts[depth] = errors.length;
 
-    return currentDepth;
+    return depth;
   }
 
   static end(level: number): void {
     depth = level - 1;
-    if (errors.length !== startCounts[level]) {
-      if (level > 0) {
-        throw ScopeAbortSignal.instance;
-      } else {
-        const currentErrors = errors;
-        errors = [];
+    if (errors.length === startCounts[level]) return;
 
-        if (currentErrors.length === 1) {
-          throw currentErrors[0];
-        } else {
-          throw new AggregateError(currentErrors, '[ErrorScope]: multiple errors occurred.');
-        }
+    if (level > 0) {
+      throw ScopeAbortSignal.instance;
+    } else {
+      const currentErrors = errors;
+      errors = [];
+
+      if (currentErrors.length === 1) {
+        throw currentErrors[0];
+      } else {
+        throw new AggregateError(currentErrors, '[ErrorScope]: multiple errors occurred.');
       }
     }
   }
