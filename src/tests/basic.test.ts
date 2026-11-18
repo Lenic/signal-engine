@@ -970,6 +970,39 @@ describe('6. Dispose: stop reacting and release dependencies', () => {
     // sees the intermediate '1-0'. Wrap the writes in a batch inside the cleanup to group them.
     expect(seen).toEqual(['0-0', '1-0', '1-1']);
   });
+
+  test('6.9 a memo disposed while checking its own dependency versions does not re-run', () => {
+    const s = new SignalValue(0);
+    let outerRuns = 0;
+
+    // Declared ahead so the upstream memo can dispose the downstream one.
+    // eslint-disable-next-line prefer-const
+    let outer: MemoValue<number>;
+
+    // Reading `inner.version` refreshes it, and this refresh disposes `outer` midway through
+    // `outer`'s own up-to-date check.
+    const inner = new MemoValue(() => {
+      const v = s.value;
+      if (v === 1) outer.dispose();
+      return v;
+    });
+
+    outer = new MemoValue(() => {
+      outerRuns += 1;
+      return inner.value * 2;
+    });
+
+    // Subscribing makes the write mark `outer` UNCHECKED, so it has to compare versions first.
+    new EffectAction(() => {
+      void outer.value;
+    });
+    expect(outerRuns).toBe(1);
+
+    // Its getter is already released, so running it would throw.
+    expect(() => s.setValue(1)).not.toThrow();
+    expect(outer.isDisposed).toBe(true);
+    expect(outerRuns).toBe(1);
+  });
 });
 
 describe('7. Batch: grouped writes', () => {

@@ -72,7 +72,14 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
 
     const originalDirtyType = this.dirtyType;
     this.dirtyType = DIRTY_TYPE_CLEAN;
-    if (originalDirtyType === DIRTY_TYPE_UNCHECKED && (this.isUpToDate() || this.isDisposed)) return false;
+
+    if (originalDirtyType === DIRTY_TYPE_UNCHECKED) {
+      for (let node = this.connectibleHead; node; node = node.nextConnectible) {
+        if (node.connectibleVersion !== node.connectible.version) return !this.isDisposed;
+      }
+
+      return false;
+    }
 
     return true;
   }
@@ -87,38 +94,19 @@ export abstract class Runnable<T extends Runnable<T>> extends Disposable impleme
     globalContext.activeEffect = this;
 
     try {
-      return this.runAction(action);
+      this.runId += 1;
+      this.connectibleCurrent = this.connectibleHead;
+      const result = action(this as unknown as T);
+
+      for (let node = this.connectibleCurrent; node; node = this.connectibleCurrent) {
+        node.dispose();
+      }
+
+      return result;
     } finally {
       this.isSelfRunning = false;
 
       globalContext.activeEffect = previousActiveEffect;
-    }
-  }
-
-  private isUpToDate(): boolean {
-    let node = this.connectibleHead;
-    while (node) {
-      if (node.connectibleVersion !== node.connectible.version) return false;
-      node = node.nextConnectible;
-    }
-
-    return true;
-  }
-
-  private runAction<TResult = void>(action: IAction<[context: T], TResult>): TResult {
-    this.runId += 1;
-    this.connectibleCurrent = this.connectibleHead;
-    const result = action(this as unknown as T);
-    this.clearConnnectsTail();
-    return result;
-  }
-
-  private clearConnnectsTail() {
-    let node = this.connectibleCurrent;
-    while (node) {
-      const next = node.nextConnectible;
-      node.dispose();
-      node = next;
     }
   }
 }
