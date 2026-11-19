@@ -1105,6 +1105,103 @@ describe('7. Batch: grouped writes', () => {
     a.setValue(3);
     expect(seen).toEqual([10, 30]);
   });
+
+  /**
+   * The effect queue is flushed while the outermost batch is still open (`BatchScope.end` calls
+   * `onBeforeExit` before it resets the depth), so a write made by an effect during the flush is
+   * snapshotted like any batched write. That snapshot must not outlive the flush that took it.
+   */
+  describe('7.5 a write made by an effect during the flush leaves no snapshot behind', () => {
+    test('7.5.1 a later batch that cancels out still runs nothing downstream', () => {
+      const trigger = new SignalValue(0);
+      const target = new SignalValue(0);
+
+      // writes `target` from inside the flush once `trigger` moves
+      new EffectAction(() => {
+        const value = trigger.value;
+        if (value !== 0) target.setValue(value);
+      });
+
+      const seen: number[] = [];
+      new EffectAction(() => {
+        seen.push(target.value);
+      });
+
+      trigger.setValue(1);
+      expect(seen).toEqual([0, 1]);
+
+      // the writes cancel out, so the batch must leave `target` exactly as it found it
+      const level = BatchScope.begin();
+      try {
+        target.setValue(2);
+        target.setValue(1);
+      } finally {
+        BatchScope.end(level);
+      }
+
+      expect(target.value).toBe(1);
+      expect(seen).toEqual([0, 1]);
+
+      // and the graph keeps reacting afterwards
+      target.setValue(3);
+      expect(seen).toEqual([0, 1, 3]);
+    });
+
+    test('7.5.2 the same cancelling batch without a prior effect write, for reference', () => {
+      const target = new SignalValue(1);
+
+      const seen: number[] = [];
+      new EffectAction(() => {
+        seen.push(target.value);
+      });
+
+      const level = BatchScope.begin();
+      try {
+        target.setValue(2);
+        target.setValue(1);
+      } finally {
+        BatchScope.end(level);
+      }
+
+      expect(seen).toEqual([1]);
+    });
+
+    test('7.5.3 an unrelated write does not re-run a reader of the written signal', () => {
+      const trigger = new SignalValue(0);
+      const target = new SignalValue(0);
+      const unrelated = new SignalValue(0);
+
+      // changes `target` and puts it back, both from inside the flush
+      new EffectAction(() => {
+        const value = trigger.value;
+        if (value !== 0) {
+          target.setValue(value);
+          target.setValue(0);
+        }
+      });
+
+      let targetRuns = 0;
+      new EffectAction(() => {
+        targetRuns++;
+        void target.value;
+      });
+
+      const seenUnrelated: number[] = [];
+      new EffectAction(() => {
+        seenUnrelated.push(unrelated.value);
+      });
+
+      trigger.setValue(1);
+      const runsAfterFlush = targetRuns;
+
+      // `target` is not touched here; only a flush happens, which must not revisit the old write
+      unrelated.setValue(1);
+
+      expect(seenUnrelated).toEqual([0, 1]);
+      expect(target.value).toBe(0);
+      expect(targetRuns).toBe(runsAfterFlush);
+    });
+  });
 });
 
 describe('8. Depth: long dependency chains', () => {

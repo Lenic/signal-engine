@@ -73,6 +73,7 @@ export interface IBatchSnapshot<T = unknown> {
   version: number;
   value: T;
   hasBeenRead: boolean;
+  next?: IBatchSnapshot<T>;
 }
 
 export interface ILinked<T> {

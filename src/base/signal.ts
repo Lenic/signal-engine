@@ -88,11 +88,12 @@ export class SignalValue<T> implements ISignalValue<T> {
 
   private addBatchSnapshot() {
     if (BatchScope.isBatching && !this._isQueuedForBatchResume) {
-      globalContext.batchSnapshots.push({
+      globalContext.enqueueBatchSnapshot({
         instance: this as SignalValue<unknown>,
         version: this._version,
         value: this._value,
         hasBeenRead: this._hasBeenRead,
+        next: undefined,
       });
       this._isQueuedForBatchResume = true;
     }
