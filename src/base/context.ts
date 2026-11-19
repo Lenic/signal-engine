@@ -7,13 +7,32 @@ import { SignalValue } from './signal';
 
 const MAX_ITERATION_DEPTH = 100;
 
-let inactiveEffectList: IEffectAction[] = [];
+let effectHead: IEffectAction | undefined = undefined;
+let effectTail: IEffectAction | undefined = undefined;
+
+function clearEffectList() {
+  for (let node = effectHead; node; node = effectHead) {
+    node.isEnqueued = false;
+
+    effectHead = node.nextEffect;
+    node.nextEffect = undefined;
+  }
+
+  effectTail = undefined;
+}
 
 export const globalContext = {
   activeOwner: undefined as IEffectOwner | undefined,
-  effectList: [] as IEffectAction[],
   batchSnapshots: [] as IBatchSnapshot[],
   activeEffect: undefined as IRunnable | undefined,
+  enqueueToEffectList(effect: IEffectAction) {
+    if (effectTail) {
+      effectTail.nextEffect = effect;
+      effectTail = effect;
+    } else {
+      effectHead = effectTail = effect;
+    }
+  },
   track(source: IConnectible, sourceVersion: number): void {
     const effect = this.activeEffect;
     if (effect === undefined || effect.isDisposed) return;
@@ -52,11 +71,6 @@ export const globalContext = {
   },
 };
 
-function clearEffectList() {
-  globalContext.effectList.forEach((v) => void (v.isEnqueued = false));
-  globalContext.effectList.length = 0;
-}
-
 let isConsuming = false;
 function consumeTail() {
   if (globalContext.batchSnapshots.length) {
@@ -64,14 +78,14 @@ function consumeTail() {
     globalContext.batchSnapshots.length = 0;
   }
 
-  if (!globalContext.effectList.length) return;
+  if (!effectHead) return;
 
   if (isConsuming) return;
   isConsuming = true;
 
   try {
     let iterationLevel = 0;
-    while (globalContext.effectList.length) {
+    while (effectHead) {
       if (iterationLevel > MAX_ITERATION_DEPTH) {
         clearEffectList();
 
@@ -79,26 +93,28 @@ function consumeTail() {
       }
       iterationLevel += 1;
 
-      const list = globalContext.effectList;
-      globalContext.effectList = inactiveEffectList;
-      inactiveEffectList = list;
+      let head: IEffectAction | undefined = effectHead;
+      effectHead = undefined;
+      effectTail = undefined;
 
       const errorLevel = ErrorScope.begin();
       try {
-        for (let i = 0; i < list.length; i++) {
-          const item = list[i];
-          item.isEnqueued = false;
-          if (item.isDisposed) continue;
+        while (head) {
+          const effect = head;
+          effect.isEnqueued = false;
 
+          const next = effect.nextEffect;
+          head.nextEffect = undefined;
+          head = next;
+
+          if (effect.isDisposed) continue;
           try {
-            item.run();
+            effect.run();
           } catch (e) {
             ErrorScope.record(e);
           }
         }
       } finally {
-        list.length = 0;
-
         if (ErrorScope.hasError) {
           clearEffectList();
         }

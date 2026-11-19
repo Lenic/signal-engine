@@ -90,6 +90,7 @@ export interface IEffectOwner {
 
 export interface IEffectAction extends IRunnable, IEffectOwner {
   isEnqueued: boolean;
+  nextEffect?: IEffectAction;
 
   run(): void;
 }

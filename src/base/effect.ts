@@ -22,6 +22,7 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
   private _action: IAction<[], void | IAction>;
 
   isEnqueued: boolean;
+  nextEffect?: IEffectAction;
 
   childrenHead?: ILinked<IDisposable>;
   childrenTail?: ILinked<IDisposable>;
@@ -37,6 +38,7 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
     this._needsToPushToQueue = DIRTY_TYPE_CLEAN;
 
     this.isEnqueued = false;
+    this.nextEffect = undefined;
 
     this.run();
   }
@@ -66,7 +68,7 @@ export class EffectAction extends Runnable<EffectAction> implements IEffectActio
 
     if (!this.isEnqueued) {
       this.isEnqueued = true;
-      globalContext.effectList.push(this);
+      globalContext.enqueueToEffectList(this);
     }
   }
 
