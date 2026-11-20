@@ -1317,6 +1317,44 @@ describe('9. Errors: collected at the outermost boundary', () => {
     expect(cleaned).toEqual(['first', 'second']);
     expect(parentRuns).toBe(2);
   });
+
+  test('9.3 a comparer throwing while the flush restores snapshots does not break later error reporting', () => {
+    const comparerFail = new Error('comparer failed');
+    const laterFail = new Error('later effect failed');
+
+    let comparerThrows = false;
+    const watched = new SignalValue(0, {
+      comparer: (x, y) => {
+        if (comparerThrows) throw comparerFail;
+        return x === y;
+      },
+    });
+    const trigger = new SignalValue(0);
+
+    new EffectAction(() => {
+      void watched.value;
+    });
+
+    // writing `watched` inside the flush takes a snapshot of it, so the restore at the end of the
+    // round calls the user comparer -- which is made to throw from then on
+    new EffectAction(() => {
+      if (trigger.value !== 1) return;
+      watched.setValue(10);
+      comparerThrows = true;
+    });
+
+    expect(() => trigger.setValue(1)).toThrow(comparerFail);
+    comparerThrows = false;
+
+    // an unrelated effect failing afterwards must reach the writer as itself,
+    // not as the private abort signal of a scope that was never closed
+    const other = new SignalValue(0);
+    new EffectAction(() => {
+      if (other.value === 1) throw laterFail;
+    });
+
+    expect(() => other.setValue(1)).toThrow(laterFail);
+  });
 });
 
 // describe('TestSuite', () => {});
